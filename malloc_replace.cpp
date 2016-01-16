@@ -1,6 +1,6 @@
 /*
- * Shared library to let new fail after a given number of successful new 
- * calls. Used to test out-of-memory handling of programs.
+ * Shared library to let specific malloc calls fail
+ * Used to test out-of-memory handling of programs.
  * 
  * 01/2016 by Michael Schwarz 
  *

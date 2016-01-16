@@ -187,8 +187,8 @@ void map_iterator_next() {
     thisit->current = thisit->current->next; 
   } else {
     do {
-      if(thisit->position == thisit->obj->size) break;
       thisit->position++;
+      if(thisit->position == thisit->obj->size) break;
       thisit->current = (thisit->obj->data[thisit->position]).next;
       if(thisit->position >= thisit->obj->size - 1) break;
     } while(!thisit->current);

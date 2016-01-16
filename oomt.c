@@ -168,6 +168,20 @@ int main(int argc, char* argv[]) {
   
   set_filename(args[0]);
   
+  // check if compiled with debug symbols
+  char re_cmdline[256];
+  sprintf(re_cmdline, "readelf --debug-dump=line \"%s\" | wc -l", args[0]);
+  FILE* dbg = popen(re_cmdline, "r");
+  if(dbg) {
+    char debug_lines[32];
+    fgets(debug_lines, 32, dbg);
+    if(atoi(debug_lines) == 0) {
+      log("Could not find debugging info! Did you compile with -g?\n");
+      log("\n");
+    }
+    pclose(dbg);
+  }
+  
   // fork first to profile
   log("Profiling start\n");
   FILE* f = fopen("profile", "wb");
@@ -337,6 +351,7 @@ int main(int argc, char* argv[]) {
     map_iterator(it)->next();
   }
   map_iterator(it)->destroy();
+  map(crashes)->destroy();
   log("\n");
   log("\n");
   log("FAINT finished successfully!\n");
