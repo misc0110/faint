@@ -15,6 +15,7 @@ static h_malloc real_malloc = NULL;
 static h_abort real_abort = NULL;
 static h_exit real_exit = NULL;
 static h_exit real_exit1 = NULL;
+static h_realloc real_realloc = NULL;
 
 static unsigned int is_backtrace = 0;
 
@@ -33,8 +34,9 @@ static void _init(void)
     real_abort = (h_abort)dlsym(RTLD_NEXT, "abort");
     real_exit = (h_exit)dlsym(RTLD_NEXT, "exit");
     real_exit1 = (h_exit)dlsym(RTLD_NEXT, "_exit");
+    real_realloc = (h_realloc)dlsym(RTLD_NEXT, "realloc");
     
-    if (real_malloc == NULL || real_abort == NULL || real_exit == NULL || real_exit1 == NULL) 
+    if (real_malloc == NULL || real_abort == NULL || real_exit == NULL || real_exit1 == NULL || real_realloc == NULL) 
     {
       fprintf(stderr, "Error in `dlsym`: %s\n", dlerror());
       return;
@@ -161,6 +163,40 @@ void *malloc(size_t size)
   // don't know what to do
   return NULL;
 }
+
+//-----------------------------------------------------------------------------
+void *realloc(void* mem, size_t size)
+{
+  if(real_realloc == NULL) _init();
+  
+  if(is_backtrace) {
+      return real_realloc(mem, size);
+  }
+
+  void* addr = __builtin_return_address(0);
+  current_malloc = addr;
+  
+  if(settings.mode == PROFILE ) {
+    save_trace();
+    return real_realloc(mem, size);
+  } else if(settings.mode == INJECT) {
+    if(!map(mallocs)->has(addr)) {
+      printf("strange, %p was not profiled\n", addr);   
+      return real_realloc(mem, size);
+    } else {
+      if(map(mallocs)->get(addr)) {
+        // let it fail   
+        return NULL;
+      } else {
+        // real realloc   
+        return real_realloc(mem, size);
+      }
+    }
+  }
+  // don't know what to do
+  return NULL;
+}
+
 
 
 //-----------------------------------------------------------------------------

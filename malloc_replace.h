@@ -34,6 +34,7 @@ struct __cxa_eh_globals {
 
 // function signatures of malloc and abort
 typedef void* (*h_malloc)(size_t);
+typedef void* (*h_realloc)(void*, size_t);
 typedef void (*h_abort)(void);
 typedef void (*h_exit)(int);
 

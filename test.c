@@ -12,7 +12,9 @@ int* do_mem(int size) {
     int i;
     for(i = 0; i < size; i++) {
       int* x = helper(size);   
-      //x[0] = 4;
+      x[0] = 3;
+      x = realloc(x, (1024 + i) * sizeof(int));
+      x[0] = 4;
       free(x);
     }
     int* y = malloc(size * sizeof(int));
