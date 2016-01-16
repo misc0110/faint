@@ -2,7 +2,7 @@ all: faint test testcpp
 
 faint: faint.o map.c malloc_replace 
 	gcc -Wall -g -c map.c -o map_c.o
-	gcc faint.o map_c.o -Wall -g -o faint
+	gcc faint.o map_c.o -Wall -g -Wl,--format=binary -Wl,malloc_replace.so -Wl,--format=default -o faint
 
 faint.o: faint.c
 	gcc -c faint.c -Wall -g -fno-builtin-log -o faint.o
@@ -28,4 +28,10 @@ run: faint test
 	
 runcpp: faint testcpp
 	./faint testcpp
+	
+install: faint
+	cp faint /usr/bin/faint
+	
+uninstall: 
+	rm /usr/bin/faint
 	

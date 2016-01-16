@@ -15,6 +15,7 @@
 #include <stdarg.h>
 #include <time.h>
 #include <errno.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/personality.h>
@@ -27,6 +28,10 @@
 #endif
 
 MallocSettings settings;
+
+extern uint8_t malloc_lib[]     asm("_binary_malloc_replace_so_start");
+extern uint8_t malloc_lib_end[] asm("_binary_malloc_replace_so_end");
+
 
 // ---------------------------------------------------------------------------
 void write_settings() {
@@ -159,6 +164,7 @@ void cleanup() {
   remove("settings");
   remove("profile");
   remove("crash");
+  remove("malloc_replace.so");
 }
 
 // ---------------------------------------------------------------------------
@@ -169,12 +175,21 @@ int main(int argc, char* argv[]) {
   }
   atexit(cleanup);
 
+
   log("Starting, Version 1.0\n");
   log("\n");
 
-  FILE* so = fopen("malloc_replace.so", "rb");
+  // extract malloc replace library
+  size_t malloc_lib_size = (size_t)((char*)malloc_lib_end - (char*)malloc_lib);
+
+  FILE* so = fopen("./malloc_replace.so", "wb");
   if(!so) {
-    log("Could not find 'malloc_replace.so'. Aborting.\n");
+    log("Could not extract 'malloc_replace.so'. Aborting.\n");
+    exit(1);
+  }
+  if(fwrite(malloc_lib, malloc_lib_size, 1, so) != 1) {
+    log("Could not write to file 'malloc_replace.so'. Aborting.\n");
+    fclose(so);
     exit(1);
   }
   fclose(so);
