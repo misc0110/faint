@@ -2,14 +2,13 @@
 #define _MR_H_
 
 enum Mode {
-  PROFILE, 
-  INJECT  
+  PROFILE, INJECT
 };
 
 typedef struct {
     enum Mode mode;
     int limit;
     char filename[256];
-} __attribute__((packed)) MallocSettings; 
+}__attribute__((packed)) MallocSettings;
 
 #endif

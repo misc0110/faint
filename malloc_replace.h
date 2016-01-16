@@ -4,7 +4,7 @@
  * 
  * 01/2016 by Michael Schwarz 
  *
- **/ 
+ **/
 
 #ifndef _MALLOC_REPLACE_H_
 #define _MALLOC_REPLACE_H_
@@ -17,15 +17,14 @@
 #include <cxxabi.h>
 
 #ifndef __USE_GNU
- #define __USE_GNU
+#define __USE_GNU
 #endif
 
 #include <dlfcn.h>
 
-
 // structs to get name from an exception
 struct __cxa_exception {
-  std::type_info *inf;
+    std::type_info *inf;
 };
 
 struct __cxa_eh_globals {
@@ -39,9 +38,5 @@ typedef void* (*h_calloc)(size_t, size_t);
 typedef void (*h_abort)(void);
 typedef void (*h_exit)(int);
 
-
 extern "C" __cxa_eh_globals* __cxa_get_globals();
-
-
-
 #endif

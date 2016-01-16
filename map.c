@@ -12,7 +12,6 @@ allocator map_allocate = malloc;
 #define thisit ((cmap_iterator*)_obj_addr[_obj_addr_pos - 1])
 #define objreturn --_obj_addr_pos; return 
 
-
 // ---------------------------------------------------------------------------
 typedef struct _cmap_entry_ {
   void* key;
@@ -20,10 +19,9 @@ typedef struct _cmap_entry_ {
   struct _cmap_entry_* next;
 } cmap_entry;
 
-
 // ---------------------------------------------------------------------------
 void cmap_entry_dump(cmap_entry* start) {
-  printf("{%ld} ", (long)(start->value));
+  printf("{%ld} ", (long) (start->value));
   start = start->next;
   while(start) {
     printf("(%p, %p) ", (start->key), (start->value));
@@ -33,44 +31,44 @@ void cmap_entry_dump(cmap_entry* start) {
 
 // ---------------------------------------------------------------------------
 void cmap_entry_append(cmap_entry* start, void* key, void* value) {
- start->value = (void*)(((size_t)start->value) + 1);
- while(start->next) {
-  start = start->next; 
- }
- start->next = (cmap_entry*)map_allocate(sizeof(cmap_entry));
- start->next->next = NULL;
- start->next->key = key;
- start->next->value = value;
+  start->value = (void*) (((size_t) start->value) + 1);
+  while(start->next) {
+    start = start->next;
+  }
+  start->next = (cmap_entry*) map_allocate(sizeof(cmap_entry));
+  start->next->next = NULL;
+  start->next->key = key;
+  start->next->value = value;
 }
 
 // ---------------------------------------------------------------------------
 cmap_iterator* map_iterator(cmap_iterator* it) {
- if(_obj_addr_pos >= MAX_MAP_NESTING) {
-     printf("ERROR! Max nesting reached!\n");
-     return NULL;
- }
+  if(_obj_addr_pos >= MAX_MAP_NESTING) {
+    printf("ERROR! Max nesting reached!\n");
+    return NULL;
+  }
   _obj_addr[_obj_addr_pos++] = it;
-  return it;  
+  return it;
 }
 
 // ---------------------------------------------------------------------------
 cmap* map(cmap* m) {
- if(_obj_addr_pos >= MAX_MAP_NESTING) {
-     printf("ERROR! Max nesting reached!\n");
-     return NULL;
- }
- _obj_addr[_obj_addr_pos++] = m;
- return m; 
+  if(_obj_addr_pos >= MAX_MAP_NESTING) {
+    printf("ERROR! Max nesting reached!\n");
+    return NULL;
+  }
+  _obj_addr[_obj_addr_pos++] = m;
+  return m;
 }
 
 // ---------------------------------------------------------------------------
 int map_hash(void* key, int size) {
-  return (long)key % size; 
+  return (long) key % size;
 }
 
 // ---------------------------------------------------------------------------
 int map_key_compare(void* key1, void* key2) {
-  return key1 == key2;  
+  return key1 == key2;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +76,8 @@ cmap_entry* _map_key_position(cmap* m, void* key) {
   int position = m->hash(key, m->size);
   cmap_entry* start = (m->data[position]).next;
   while(start) {
-    if(m->compare(start->key, key)) return start; 
+    if(m->compare(start->key, key))
+      return start;
     start = start->next;
   }
   return NULL;
@@ -86,7 +85,7 @@ cmap_entry* _map_key_position(cmap* m, void* key) {
 
 // ---------------------------------------------------------------------------
 void _map_resize(cmap* m, int new_size) {
-  cmap_entry* new_data = (cmap_entry*)calloc(sizeof(cmap_entry), new_size);
+  cmap_entry* new_data = (cmap_entry*) calloc(sizeof(cmap_entry), new_size);
   // iterate over all entries and insert into new structure
   int i;
   for(i = 0; i < m->size; i++) {
@@ -107,32 +106,35 @@ void _map_resize(cmap* m, int new_size) {
 
 // ---------------------------------------------------------------------------
 void* map_get(void* key) {
-  cmap_entry* entry = _map_key_position(this, key);  
-  objreturn (entry ? entry->value : NULL);
+  cmap_entry* entry = _map_key_position(this, key);
+  objreturn
+(  entry ? entry->value : NULL);
 }
 
 // ---------------------------------------------------------------------------
 int map_exists(void* key) {
-  cmap_entry* entry = _map_key_position(this, key);  
-  objreturn (entry ? 1 : 0);
+  cmap_entry* entry = _map_key_position(this, key);
+  objreturn
+(  entry ? 1 : 0);
 }
 
 // ---------------------------------------------------------------------------
-void map_set(void* key, void* value) { 
+void map_set(void* key, void* value) {
   // check if already exists
   cmap_entry* exist = _map_key_position(this, key);
   if(exist) {
     exist->value = value;
-    objreturn;
-  }
-  
+    objreturn
+;  }
+
   // otherwise, append
-  int position = this->hash(key, this->size); 
+  int position = this->hash(key, this->size);
   cmap_entry_append(&(this->data[position]), key, value);
   this->entries++;
-  if(this->entries > this->size / 2) _map_resize(this, this->size * 2);
-  objreturn;
-}
+  if(this->entries > this->size / 2)
+    _map_resize(this, this->size * 2);
+  objreturn
+;}
 
 // ---------------------------------------------------------------------------
 void map_unset(void* key) {
@@ -144,15 +146,15 @@ void map_unset(void* key) {
       cmap_entry* tofree = last->next;
       last->next = start->next;
       free(tofree);
-      (this->data[position]).value = (void*)(((size_t)((this->data[position]).value)) - 1);
+      (this->data[position]).value = (void*) (((size_t) ((this->data[position]).value)) - 1);
       this->entries--;
-      objreturn; 
-    } 
+      objreturn
+;    }
     last = start;
     start = start->next;
-  }  
-  objreturn;
-}
+  }
+  objreturn
+;}
 
 // ---------------------------------------------------------------------------
 void map_clear() {
@@ -168,8 +170,8 @@ void map_clear() {
     (this->data[i]).next = NULL;
   }
   this->entries = 0;
-  objreturn;
-}
+  objreturn
+;}
 
 // ---------------------------------------------------------------------------
 void map_destroy() {
@@ -178,77 +180,83 @@ void map_destroy() {
   this->data = 0;
   this->size = 0;
   free(this);
-  objreturn;
-}
+  objreturn
+;}
 
 // ---------------------------------------------------------------------------
 void map_iterator_next() {
   if(thisit->current && thisit->current->next) {
-    thisit->current = thisit->current->next; 
+    thisit->current = thisit->current->next;
   } else {
     do {
       thisit->position++;
-      if(thisit->position == thisit->obj->size) break;
+      if(thisit->position == thisit->obj->size)
+        break;
       thisit->current = (thisit->obj->data[thisit->position]).next;
-      if(thisit->position >= thisit->obj->size - 1) break;
+      if(thisit->position >= thisit->obj->size - 1)
+        break;
     } while(!thisit->current);
   }
-  objreturn; 
-}
+  objreturn
+;}
 
 // ---------------------------------------------------------------------------
 void* map_iterator_key() {
   void* key = thisit->current->key;
-  objreturn key;
+  objreturn
+key  ;
 }
 
 // ---------------------------------------------------------------------------
 void* map_iterator_value() {
   void* val = thisit->current->value;
-  objreturn val;  
+  objreturn
+val  ;
 }
 
 // ---------------------------------------------------------------------------
 int map_iterator_end() {
   if(thisit->current == NULL || thisit->position >= thisit->obj->size) {
-      objreturn 1;
+    objreturn
+1    ;
   }
   if(thisit->position >= thisit->obj->size && thisit->current->next == NULL) {
-      objreturn 1; 
+    objreturn 1;
   }
   else {
-      objreturn 0;
+    objreturn 0;
   }
 }
 
 // ---------------------------------------------------------------------------
 void map_iterator_destroy() {
   free(thisit);
-  objreturn;
-}
+  objreturn
+;}
 
 // ---------------------------------------------------------------------------
 cmap_iterator* map_iter() {
-  cmap_iterator* it = (cmap_iterator*)map_allocate(sizeof(cmap_iterator));
+  cmap_iterator* it = (cmap_iterator*) map_allocate(sizeof(cmap_iterator));
   it->position = 0;
   it->current = (this->data[0]).next;
   it->obj = this;
-  
+
   it->end = map_iterator_end;
   it->next = map_iterator_next;
   it->key = map_iterator_key;
   it->value = map_iterator_value;
   it->destroy = map_iterator_destroy;
-  
-  if(!it->current) map_iterator(it)->next();
-  objreturn it;
+
+  if(!it->current)
+    map_iterator(it)->next();
+  objreturn
+it  ;
 }
 
 // ---------------------------------------------------------------------------
 void map_dump() {
   int i;
-  printf("-----------------------------\n"),
-  printf(" - size: %d\n", this->size);
+  printf("-----------------------------\n"), printf(" - size: %d\n", this->size);
   printf(" - entries: %d\n", this->entries);
   printf(" ------- data ---------\n");
   for(i = 0; i < this->size; i++) {
@@ -257,9 +265,9 @@ void map_dump() {
     printf("\n");
   }
   printf("-----------------------------\n"),
-  
-  objreturn; 
-}
+
+  objreturn
+;}
 
 // ---------------------------------------------------------------------------
 void map_init(int size) {
@@ -267,16 +275,16 @@ void map_init(int size) {
     map(this)->clear();
     free(this->data);
   }
-  
+
   this->size = size;
-  this->entries = 0;    
-  this->data = (cmap_entry*)calloc(sizeof(cmap_entry), this->size);
-  objreturn;  
-}
+  this->entries = 0;
+  this->data = (cmap_entry*) calloc(sizeof(cmap_entry), this->size);
+  objreturn
+;}
 
 // ---------------------------------------------------------------------------
 void _map_init(cmap** m) {
-  *m = (cmap*)map_allocate(sizeof(cmap));
+  *m = (cmap*) map_allocate(sizeof(cmap));
 
   (*m)->init = map_init;
   (*m)->get = map_get;
@@ -289,15 +297,15 @@ void _map_init(cmap** m) {
   (*m)->iterator = map_iter;
   (*m)->hash = map_hash;
   (*m)->compare = map_key_compare;
-  
+
   (*m)->data = NULL;
-  
+
   map(*m)->init(MAP_START_SIZE);
 }
 
 // ---------------------------------------------------------------------------
 int map_hash_str(void *str_, int size) {
-  unsigned char* str = (unsigned char*)str_;
+  unsigned char* str = (unsigned char*) str_;
   int hash = 5381;
   int c;
 
@@ -308,14 +316,14 @@ int map_hash_str(void *str_, int size) {
 
 // ---------------------------------------------------------------------------
 int map_compare_str(void* key1_, void* key2_) {
-  char* key1 = (char*)key1_;
-  char* key2 = (char*)key2_;
+  char* key1 = (char*) key1_;
+  char* key2 = (char*) key2_;
   while(*key1 || *key2) {
-    if(*key1 != *key2) return 0;
+    if(*key1 != *key2)
+      return 0;
     key1++;
     key2++;
   }
   return 1;
 }
-
 

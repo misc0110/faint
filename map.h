@@ -22,39 +22,37 @@ enum map_type {
 typedef struct _cmap_iterator_ cmap_iterator;
 typedef struct _cmap_entry_ cmap_entry;
 typedef struct {
-  cmap_entry* data;
-  
-  int size;
-  int entries;
-  
-  void (*init)(int);
-  void* (*get)(void*);
-  void (*set)(void*, void*);
-  void (*dump)(void);
-  int (*has)(void*);
-  void (*destroy)(void);
-  void (*unset)(void*);
-  void (*clear)(void);
-  int (*hash)(void*,int);
-  int (*compare)(void*,void*);
-  cmap_iterator* (*iterator)(void);
-} cmap;
+    cmap_entry* data;
 
+    int size;
+    int entries;
+
+    void (*init)(int);
+    void* (*get)(void*);
+    void (*set)(void*, void*);
+    void (*dump)(void);
+    int (*has)(void*);
+    void (*destroy)(void);
+    void (*unset)(void*);
+    void (*clear)(void);
+    int (*hash)(void*, int);
+    int (*compare)(void*, void*);
+    cmap_iterator* (*iterator)(void);
+} cmap;
 
 // ---------------------------------------------------------------------------
 typedef struct _cmap_iterator_ {
-  cmap* obj;
-  int position;
-  cmap_entry* current;
-  
-  void (*next)(void);
-  void* (*key)(void);
-  void* (*value)(void);
-  int (*end)(void);
-  void (*destroy)(void);
-  
-} cmap_iterator;
+    cmap* obj;
+    int position;
+    cmap_entry* current;
 
+    void (*next)(void);
+    void* (*key)(void);
+    void* (*value)(void);
+    int (*end)(void);
+    void (*destroy)(void);
+
+} cmap_iterator;
 
 void _map_init(cmap** m);
 cmap* map(cmap* m);
