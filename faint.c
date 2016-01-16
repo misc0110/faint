@@ -1,7 +1,6 @@
 /*
  * Out-of-memory testing program. Needs malloc_replace.so to be present in the 
- * working directory, as well as write privilege to the file "mallocs" in 
- * the working directory.
+ * working directory.
  * 
  * 01/2016 by Michael Schwarz 
  *
@@ -15,10 +14,17 @@
 #include <string.h>
 #include <stdarg.h>
 #include <time.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/personality.h>
 #include "settings.h"
 #include "map.h"
+
+#ifndef HAVE_PERSONALITY
+ #include <syscall.h>
+ #define personality(pers) ((long)syscall(SYS_personality, pers))
+#endif
 
 MallocSettings settings;
 
@@ -99,8 +105,7 @@ int get_crash_address(void** crash, void** malloc_addr) {
 int get_file_and_line (char* binary, void* addr, char *file, int *line, char* function) {
   static char buf[256];
 
-  // prepare command to be executed
-  // our program need to be passed after the -e parameter
+  // call addr2line
   sprintf (buf, "addr2line -C -e %s -s -f -i %lx", binary, (size_t)addr);
   FILE* f = popen (buf, "r");
 
@@ -149,12 +154,23 @@ int get_file_and_line (char* binary, void* addr, char *file, int *line, char* fu
 }
 
 // ---------------------------------------------------------------------------
+void cleanup() {
+  remove("settings");
+  remove("profile");
+  remove("crash");
+}
+
+// ---------------------------------------------------------------------------
 int main(int argc, char* argv[]) {
   if(argc <= 1) {
     printf("Usage: %s <binary to test> [arg1] [...]\n", argv[0]);
     return 0;
   }
+  atexit(cleanup);
 
+  log("Starting, Version 1.0\n");
+  log("\n");
+  
   FILE* so = fopen("malloc_replace.so", "rb");
   if(!so) {
     log("Could not find 'malloc_replace.so'. Aborting.\n");
@@ -168,10 +184,15 @@ int main(int argc, char* argv[]) {
 
   // inherit all arguments
   int i;
+  log("Binary: %s\n", argv[0]);
   for(i = 0; i < argc - 1; i++) {
+    if(i > 0) {
+        log(" Param %2d: %s\n", i, argv[i + 1]);
+    }
     args[i] = argv[i + 1]; 
   }  
   args[i] = NULL;
+  log("\n");
   
   set_filename(args[0]);
   
@@ -187,6 +208,13 @@ int main(int argc, char* argv[]) {
       log("\n");
     }
     pclose(dbg);
+  }
+  
+  // disable aslr to always get correct debug infos over multiple injection runs
+  if(personality(ADDR_NO_RANDOMIZE) == -1) {
+    log("Could not turn off ASLR: %s\n", strerror(errno));   
+  } else {
+    log("ASLR turned off successfully\n");   
   }
   
   // fork first to profile
@@ -236,7 +264,7 @@ int main(int argc, char* argv[]) {
     fclose(f);
     
     
-    log("Found %d different mallocs with %d call(s) ***\n", mallocs, calls);
+    log("Found %d different mallocs with %d call(s)\n", mallocs, calls);
     
     injections = mallocs;
     for(i = 0; i < mallocs; i++) {
@@ -337,31 +365,36 @@ int main(int argc, char* argv[]) {
  
   log("Unique crashes: %d\n", unique);
   log("\n");
-  log("Crash details:\n");
   
-  it = map(crashes)->iterator();
-  while(!map_iterator(it)->end()) {
-    void* crash = map_iterator(it)->key();
-    void* m = map_iterator(it)->value();
-    char crash_file[256], malloc_file[256], crash_fnc[256], malloc_fnc[256];
-    int crash_line, malloc_line;
-    log("\n");
-    log("Crashed at %p, caused by %p\n", crash, m);
-    if(get_file_and_line(args[0], crash, crash_file, &crash_line, crash_fnc) &&
-        get_file_and_line(args[0], m, malloc_file, &malloc_line, malloc_fnc)) {
-        log("   > Crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
-        log("   > Malloc: %s (%s) line %d\n", malloc_fnc, malloc_file, malloc_line);
-    } else {
-        log("   > N/A (maybe you forgot to compile with -g?)\n");
+  if(crash_count > 0) {
+    log("Crash details:\n");
+  
+    it = map(crashes)->iterator();
+    while(!map_iterator(it)->end()) {
+        void* crash = map_iterator(it)->key();
+        void* m = map_iterator(it)->value();
+        char crash_file[256], malloc_file[256], crash_fnc[256], malloc_fnc[256];
+        int crash_line, malloc_line;
+        log("\n");
+        log("Crashed at %p, caused by %p\n", crash, m);
+        if(get_file_and_line(args[0], crash, crash_file, &crash_line, crash_fnc) &&
+            get_file_and_line(args[0], m, malloc_file, &malloc_line, malloc_fnc)) {
+            log("   > Crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
+            log("   > Malloc: %s (%s) line %d\n", malloc_fnc, malloc_file, malloc_line);
+        } else {
+            log("   > N/A (maybe you forgot to compile with -g?)\n");
+        }
+        
+        map_iterator(it)->next();
     }
-    
-    map_iterator(it)->next();
+    map_iterator(it)->destroy();
+  } else {
+    log("Everything ok, no crashes detected!\n");   
   }
-  map_iterator(it)->destroy();
   map(crashes)->destroy();
   log("\n");
   log("\n");
-  log("FAINT finished successfully!\n");
+  log("finished successfully!\n");
  
   return 0;
 }

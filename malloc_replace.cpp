@@ -1,5 +1,5 @@
 /*
- * Shared library to let specific malloc calls fail
+ * Shared library to let specific malloc/realloc/calloc/new calls fail
  * Used to test out-of-memory handling of programs.
  * 
  * 01/2016 by Michael Schwarz 

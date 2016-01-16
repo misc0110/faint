@@ -1,11 +1,11 @@
-all: oomt test testcpp
+all: faint test testcpp
 
-oomt: oomt.o map.c malloc_replace 
+faint: faint.o map.c malloc_replace 
 	gcc -Wall -g -c map.c -o map_c.o
-	gcc oomt.o map_c.o -Wall -g -o oomt
+	gcc faint.o map_c.o -Wall -g -o faint
 
-oomt.o: oomt.c
-	gcc -c oomt.c -Wall -g -fno-builtin-log -o oomt.o
+faint.o: faint.c
+	gcc -c faint.c -Wall -g -fno-builtin-log -o faint.o
 
 malloc_replace: malloc_replace.cpp map.o
 	g++ -Wall -fPIC -DPIC -c -g -fno-stack-protector -funwind-tables malloc_replace.cpp
@@ -21,11 +21,11 @@ testcpp: test.cpp
 	g++ test.cpp -Wall -g -o testcpp
 	
 clean:
-	-rm -f *.so *.o oomt test mallocs profile settings testcpp
+	-rm -f *.so *.o faint test mallocs profile settings testcpp
 	
-run: oomt test
-	./oomt test
+run: faint test
+	./faint test
 	
-runcpp: oomt testcpp
-	./oomt testcpp
+runcpp: faint testcpp
+	./faint testcpp
 	
