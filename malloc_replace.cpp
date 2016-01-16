@@ -6,6 +6,7 @@
  *
  **/ 
 
+#include <iostream>
 #include <string.h>
 #include "malloc_replace.h"
 #include "settings.h"
@@ -93,13 +94,60 @@ void* _malloc(size_t size) {
   return real_malloc(size);   
 }
 
+//-----------------------------------------------------------------------------
+void print_backtrace() {
+    int j, nptrs;
+    void *buffer[100];
+    char **strings;
+
+    nptrs = backtrace(buffer, 100);
+    strings = backtrace_symbols(buffer, nptrs);
+    if(strings) {
+        for (j = 0; j < nptrs; j++) {
+            printf("[bt] %s\n", strings[j]);
+        }
+    }
+    free(strings);
+}
+
+//-----------------------------------------------------------------------------
+void* get_return_address(int index) {
+    int j, nptrs;
+    void *buffer[100];
+    char **strings;
+    void* addr = NULL;
+    int old_is_backtrace = is_backtrace;
+    is_backtrace = 1;
+
+    nptrs = backtrace(buffer, 100);
+    strings = backtrace_symbols(buffer, nptrs);
+    if(strings) {
+        for (j = 0; j < nptrs; j++) {
+            if(strncmp(strings[j], settings.filename, strlen(settings.filename)) == 0) {
+                if(index) {
+                    //printf("skip\n");
+                    index--;
+                    continue;
+                }                
+                addr = buffer[j];
+                break;
+            } else {
+              //printf("skip: %s\n", strings[j]);   
+            }
+        }
+        free(strings);
+    }
+    is_backtrace = old_is_backtrace;
+    return addr;
+}
+
 
 //-----------------------------------------------------------------------------
 void save_trace()
 {
         // get callee address
-        void* p = __builtin_return_address(1);
         is_backtrace = 1;
+        void* p = get_return_address(0); //__builtin_return_address(1);
 
         //printf("0x%x\n", p);
         
@@ -108,6 +156,7 @@ void save_trace()
             //printf("%s\n", info.dli_fname);
             if(info.dli_fname && strcmp(info.dli_fname, settings.filename) != 0) {
                 // not our file
+                is_backtrace = 0;
                 return;
             }
         }
@@ -142,7 +191,7 @@ void *malloc(size_t size)
       return real_malloc(size);
   }
 
-  void* addr = __builtin_return_address(0);
+  void* addr = get_return_address(0); // __builtin_return_address(0);
   current_malloc = addr;
   
   if(settings.mode == PROFILE ) {
@@ -175,7 +224,7 @@ void *realloc(void* mem, size_t size)
       return real_realloc(mem, size);
   }
 
-  void* addr = __builtin_return_address(0);
+  void* addr = get_return_address(0); //  __builtin_return_address(0);
   current_malloc = addr;
   
   if(settings.mode == PROFILE ) {
@@ -208,7 +257,7 @@ void *calloc(size_t elem, size_t size)
       return real_calloc(elem, size);
   }
 
-  void* addr = __builtin_return_address(0);
+  void* addr = get_return_address(0); // __builtin_return_address(0);
   current_malloc = addr;
   
   if(settings.mode == PROFILE ) {
@@ -225,6 +274,38 @@ void *calloc(size_t elem, size_t size)
       } else {
         // real calloc   
         return real_calloc(elem, size);
+      }
+    }
+  }
+  // don't know what to do
+  return NULL;
+}
+
+void* operator new(size_t size) {
+  if(real_malloc == NULL) _init();
+  
+  if(is_backtrace) {
+      return real_malloc(size);
+  }
+
+  void* addr = get_return_address(0);
+  current_malloc = addr;
+  
+  if(settings.mode == PROFILE ) {
+    save_trace();
+    return real_malloc(size);
+  } else if(settings.mode == INJECT) {
+    if(!map(mallocs)->has(addr)) {
+      printf("strange, %p was not profiled\n", addr);   
+      return real_malloc(size);
+    } else {
+      if(map(mallocs)->get(addr)) {
+        // let it fail 
+        throw std::bad_alloc();
+        return NULL;
+      } else {
+        // real malloc   
+        return real_malloc(size);
       }
     }
   }
@@ -252,36 +333,8 @@ void segfault_handler(int sig) {
     void* crash_addr = NULL;
     
     // find crash address in backtrace
-    int j, nptrs;
-    unsigned int pos, i;
-    void *buffer[100];
-    char addr_buffer[32];
-    char **strings;
+    crash_addr = get_return_address(0);
 
-    nptrs = backtrace(buffer, 100);
-    strings = backtrace_symbols(buffer, nptrs);
-    if(strings) {
-        for (j = 0; j < nptrs; j++) {
-            if(strncmp(strings[j], settings.filename, strlen(settings.filename)) == 0) {
-                pos = 0;
-                while(strings[j][pos] != '[' && pos < strlen(strings[j])) pos++;
-                if(pos >= strlen(strings[j])) {
-                  // not found
-                  break;   
-                }
-                for(i = pos + 1; i < strlen(strings[j]); i++) {
-                  if(strings[j][i] == ']') break;
-                  addr_buffer[i - pos - 1] = strings[j][i];   
-                }
-                addr_buffer[i] = 0;
-                crash_addr = (void*)strtol(addr_buffer, NULL, 16);
-                break;
-            }
-        }
-
-        free(strings);
-    }
-    
    // write crash report
    FILE* f = fopen("crash", "wb");
    fwrite(&current_malloc, sizeof(void*), 1, f);
@@ -291,29 +344,3 @@ void segfault_handler(int sig) {
    real_exit1(sig + 128);
 }
 
-/*
-//-----------------------------------------------------------------------------
-void abort(void) {
-  if(real_abort == NULL) _init();
-
-  // abort was called -> default terminate handler for uncaught exceptions
-  char* realname = (char*)"Unknown";
-  __cxa_eh_globals* eh = __cxa_get_globals(); 
-  if (eh && eh->exc && eh->exc->inf) {
-    int status;
-    // get name of thrown exception and demangle it
-    realname = abi::__cxa_demangle(eh->exc->inf->name(), 0, 0, &status);
-  }
-  
-  // display uncaught exception and cause segfault to make it easier to debug
-  fprintf(stderr, "\n[[Uncaught Exception <%s> - Aborting]]\n", realname);
-  
-  // segfault!
-  int *a = NULL;
-  *a = 42;
-  
-  // will never reach this, 
-  // just to be safe (otherwise abort would be an endless loop)
-  exit(-91);
-}
-*/
