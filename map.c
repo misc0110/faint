@@ -187,9 +187,10 @@ void map_iterator_next() {
     thisit->current = thisit->current->next; 
   } else {
     do {
+      if(thisit->position == thisit->obj->size) break;
       thisit->position++;
       thisit->current = (thisit->obj->data[thisit->position]).next;
-      if(thisit->position == thisit->obj->size - 1) break;
+      if(thisit->position >= thisit->obj->size - 1) break;
     } while(!thisit->current);
   }
   objreturn; 
@@ -209,10 +210,10 @@ void* map_iterator_value() {
 
 // ---------------------------------------------------------------------------
 int map_iterator_end() {
-  if(thisit->current == NULL || thisit->position == thisit->obj->size) {
+  if(thisit->current == NULL || thisit->position >= thisit->obj->size) {
       objreturn 1;
   }
-  if(thisit->position == thisit->obj->size - 1 && thisit->current == NULL) {
+  if(thisit->position >= thisit->obj->size && thisit->current->next == NULL) {
       objreturn 1; 
   }
   else {

@@ -50,7 +50,7 @@ static void _init(void)
       fread(&settings, sizeof(MallocSettings), 1, f);
       fclose(f);
     }  
-    printf("-- Mode: %d\n", settings.mode);
+    //printf("-- Mode: %d\n", settings.mode);
     if(settings.mode == INJECT) {
         if(!mallocs) map_initialize(mallocs, MAP_GENERAL);
 
@@ -63,7 +63,7 @@ static void _init(void)
               void* cnt;
               fread(&addr, sizeof(void*), 1, f);
               if(fread(&cnt, sizeof(void*), 1, f) == 0) break;
-              printf("%x -> %d\n", addr, cnt);
+              //printf("%x -> %d\n", addr, cnt);
               if(entry == settings.limit) cnt = (void*)1; else cnt = (void*)0;
               map(mallocs)->set(addr, cnt);
               entry++;
@@ -81,6 +81,7 @@ static void _init(void)
     sig_handler.sa_flags = 0;
     sigaction(SIGINT, &sig_handler, NULL);
     sigaction(SIGSEGV, &sig_handler, NULL);
+    sigaction(SIGABRT, &sig_handler, NULL);
 
     is_backtrace = 0;
 }
@@ -217,7 +218,7 @@ void segfault_handler(int sig) {
    fwrite(&crash_addr, sizeof(void*), 1, f);
    fclose(f);
    is_backtrace = 0;
-   real_exit1(sig);
+   real_exit1(sig + 128);
 };
 
 /*

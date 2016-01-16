@@ -79,8 +79,8 @@ void clear_crash_report() {
 int get_crash_address(void** crash, void** malloc_addr) {
   FILE* f = fopen("crash", "rb");
   if(!f) return 0;
-  int s = fread(crash, sizeof(void*), 1, f);
   int s1 = fread(malloc_addr, sizeof(void*), 1, f);
+  int s = fread(crash, sizeof(void*), 1, f);
   fclose(f);
   if(s == 0 || s1 == 0) return 0;
   return 1;
@@ -218,8 +218,18 @@ int main(int argc, char* argv[])
     for(i = 0; i < mallocs; i++) {
         p = fork();
         if(p) {
-            waitpid(p, NULL, 0);
-            log("Injection #%d done\n", (i + 1));
+            int status, killed = 0;
+            waitpid(p, &status, 0);
+            
+            if (WIFEXITED(status)) {
+                log("Exited, status: %d\n", WEXITSTATUS(status));
+            } else if (WIFSIGNALED(status)) {
+                log("Killed by signal %d (%s)\n", WTERMSIG(status), strsignal(WTERMSIG(status)));
+                killed = 1;
+            } else if (WIFSTOPPED(status)) {
+                log("Stopped by signal %d (%s)\n", WSTOPSIG(status), strsignal(WTERMSIG(status)));
+            }
+            
             void *crash, *m;
             int has_addr = get_crash_address(&crash, &m);
             if(has_addr) {
@@ -233,7 +243,10 @@ int main(int argc, char* argv[])
                 log(" > Malloc: %s (%s) @ %d\n", malloc_fnc, malloc_file, malloc_line);
                 map(crashes)->set(crash, m);
                 crash_count++;
+            } else {
+              if(killed) crash_count++;   
             }
+            log("Injection #%d done\n", (i + 1));
         } else {
             log("\n");
             log("Inject fault #%d\n", (i + 1));
