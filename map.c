@@ -33,7 +33,7 @@ void cmap_entry_dump(cmap_entry* start) {
 
 // ---------------------------------------------------------------------------
 void cmap_entry_append(cmap_entry* start, void* key, void* value) {
- start->value++;
+ start->value = (void*)(((size_t)start->value) + 1);
  while(start->next) {
   start = start->next; 
  }
@@ -144,7 +144,7 @@ void map_unset(void* key) {
       cmap_entry* tofree = last->next;
       last->next = start->next;
       free(tofree);
-      (this->data[position]).value--;
+      (this->data[position]).value = (void*)(((size_t)((this->data[position]).value)) - 1);
       this->entries--;
       objreturn; 
     } 

@@ -25,8 +25,6 @@ map_declare(mallocs);
 
 void* current_malloc = NULL;
 
-#define get_malloc_address() __builtin_return_address(1)
-
 //-----------------------------------------------------------------------------
 static void _init(void)
 {
@@ -86,18 +84,15 @@ static void _init(void)
     is_backtrace = 0;
 }
 
+//-----------------------------------------------------------------------------
 void* _malloc(size_t size) {
   return real_malloc(size);   
 }
 
 
-void show_backtrace()
+//-----------------------------------------------------------------------------
+void save_trace()
 {
-        /*
-        // get current address
-        void* p = __builtin_return_address(0);
-        printf("0x%x\n", p);
-        */
         // get callee address
         void* p = __builtin_return_address(1);
         is_backtrace = 1;
@@ -116,7 +111,7 @@ void show_backtrace()
         if(!mallocs) map_initialize(mallocs, MAP_GENERAL);
         
         if(map(mallocs)->has(p)) {
-          map(mallocs)->set(p, map(mallocs)->get(p) + 1);   
+          map(mallocs)->set(p, (void*)((size_t)(map(mallocs)->get(p)) + 1));   
         } else {
           map(mallocs)->set(p, (void*)1);
         }
@@ -147,11 +142,11 @@ void *malloc(size_t size)
   current_malloc = addr;
   
   if(settings.mode == PROFILE ) {
-    show_backtrace();
+    save_trace();
     return real_malloc(size);
   } else if(settings.mode == INJECT) {
     if(!map(mallocs)->has(addr)) {
-      printf("strange, %x was not profiled\n", addr);   
+      printf("strange, %p was not profiled\n", addr);   
       return real_malloc(size);
     } else {
       if(map(mallocs)->get(addr)) {
@@ -168,22 +163,27 @@ void *malloc(size_t size)
 }
 
 
+//-----------------------------------------------------------------------------
 void exit(int val) {
-   printf("Done\n");
+   if(real_exit == NULL) _init();
    real_exit(val);   
+   while(1); // to suppress gcc warning
 }
 
+//-----------------------------------------------------------------------------
 void _exit(int val) {
-   printf("Done\n");
+   if(real_exit1 == NULL) _init();
    real_exit1(val);   
 }
 
+//-----------------------------------------------------------------------------
 void segfault_handler(int sig) {
     is_backtrace = 1;
     void* crash_addr = NULL;
     
     // find crash address in backtrace
-    int i, j, pos, nptrs;
+    int j, nptrs;
+    unsigned int pos, i;
     void *buffer[100];
     char addr_buffer[32];
     char **strings;
@@ -219,7 +219,7 @@ void segfault_handler(int sig) {
    fclose(f);
    is_backtrace = 0;
    real_exit1(sig + 128);
-};
+}
 
 /*
 //-----------------------------------------------------------------------------

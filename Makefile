@@ -5,7 +5,7 @@ oomt: oomt.o map.c malloc_replace
 	gcc oomt.o map_c.o -Wall -g -o oomt
 
 oomt.o: oomt.c
-	gcc -c oomt.c -Wall -g -o oomt.o
+	gcc -c oomt.c -Wall -g -fno-builtin-log -o oomt.o
 
 malloc_replace: malloc_replace.cpp map.o
 	g++ -Wall -fPIC -DPIC -c -g -fno-stack-protector -funwind-tables malloc_replace.cpp

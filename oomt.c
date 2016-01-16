@@ -20,6 +20,7 @@
 
 MallocSettings settings;
 
+// ---------------------------------------------------------------------------
 void write_settings() {
   FILE* f = fopen("settings", "wb");
   if(f) 
@@ -29,23 +30,27 @@ void write_settings() {
   }
 }
 
+// ---------------------------------------------------------------------------
 void set_mode(enum Mode m) {
   settings.mode = m;
   write_settings();
 }
 
+// ---------------------------------------------------------------------------
 void set_limit(int lim) {
    settings.limit = lim;
    write_settings();   
 }
 
+// ---------------------------------------------------------------------------
 void set_filename(char* fn) {
    strncpy(settings.filename, fn, 255);
    settings.filename[255] = 0;
    write_settings();   
 }
 
-int log(const char *format, ...) {
+// ---------------------------------------------------------------------------
+void log(const char *format, ...) {
     static int count = 0;
     time_t timer;
     char buffer[26];
@@ -71,11 +76,13 @@ int log(const char *format, ...) {
     count++;
 }
 
+// ---------------------------------------------------------------------------
 void clear_crash_report() {
   FILE* f = fopen("crash", "wb");
   fclose(f);
 }
 
+// ---------------------------------------------------------------------------
 int get_crash_address(void** crash, void** malloc_addr) {
   FILE* f = fopen("crash", "rb");
   if(!f) return 0;
@@ -86,8 +93,8 @@ int get_crash_address(void** crash, void** malloc_addr) {
   return 1;
 }
 
-int get_file_and_line (char* binary, void* addr, char *file, int *line, char* function)
-{
+// ---------------------------------------------------------------------------
+int get_file_and_line (char* binary, void* addr, char *file, int *line, char* function) {
   static char buf[256];
 
   // prepare command to be executed
@@ -95,8 +102,7 @@ int get_file_and_line (char* binary, void* addr, char *file, int *line, char* fu
   sprintf (buf, "/usr/bin/addr2line -C -e %s -s -f -i %lx", binary, (size_t)addr);
   FILE* f = popen (buf, "r");
 
-  if (f == NULL)
-  {
+  if (f == NULL) {
     perror (buf);
     return 0;
   }
@@ -115,13 +121,11 @@ int get_file_and_line (char* binary, void* addr, char *file, int *line, char* fu
   // get file and line
   fgets (buf, 256, f);
 
-  if (buf[0] != '?')
-  {
+  if (buf[0] != '?') {
     char *p = buf;
 
     // file name is until ':'
-    while (*p != ':')
-    {
+    while (*p != ':') {
       p++;
     }
 
@@ -129,26 +133,18 @@ int get_file_and_line (char* binary, void* addr, char *file, int *line, char* fu
     // after file name follows line number
     strcpy (file , buf);
     sscanf (p,"%d", line);
-  }
-  else
-  {
+  } else {
     strcpy (file,"unkown");
     *line = 0;
   }
 
   pclose(f);
+  return 1;
 }
 
-/*
-void* _malloc(size_t size) {
-  return malloc(size);   
-}
-*/
-
-int main(int argc, char* argv[]) 
-{
-  if(argc <= 1) 
-  {
+// ---------------------------------------------------------------------------
+int main(int argc, char* argv[]) {
+  if(argc <= 1) {
     printf("Usage: %s <binary to test> [arg1] [...]\n", argv[0]);
     return 0;
   }
@@ -159,8 +155,7 @@ int main(int argc, char* argv[])
 
   // inherit all arguments
   int i;
-  for(i = 0; i < argc - 1; i++) 
-  {
+  for(i = 0; i < argc - 1; i++) {
     args[i] = argv[i + 1]; 
   }  
   args[i] = NULL;
@@ -209,8 +204,6 @@ int main(int argc, char* argv[])
     }
     log("\n");
     
-    free(m_addr);
-    free(m_count);
     // let one specific malloc fail per loop iteration
     log("Injecting %d faults, one for every malloc\n", injections);
     log("\n");
@@ -222,7 +215,8 @@ int main(int argc, char* argv[])
             waitpid(p, &status, 0);
             
             if (WIFEXITED(status)) {
-                log("Exited, status: %d\n", WEXITSTATUS(status));
+                int ret = WEXITSTATUS(status);
+                log("Exited, status: %d %s%s%s\n", ret, ret >= 128 ? "(" : "", ret >= 128 ? strsignal(ret - 128) : "", ret >= 128 ? ")" : "");
             } else if (WIFSIGNALED(status)) {
                 log("Killed by signal %d (%s)\n", WTERMSIG(status), strsignal(WTERMSIG(status)));
                 killed = 1;
@@ -249,7 +243,15 @@ int main(int argc, char* argv[])
             log("Injection #%d done\n", (i + 1));
         } else {
             log("\n");
+            log("\n");
             log("Inject fault #%d\n", (i + 1));
+            log("Fault position:\n");
+            char m_file[256], m_function[256];
+            int m_line;
+            get_file_and_line(args[0], (void*)(m_addr[i]), m_file, &m_line, m_function);
+            log(" >  %s in %s line %d\n", m_function, m_file, m_line);
+            log("\n");
+            
             // -> inject
             clear_crash_report();
             set_mode(INJECT);
@@ -257,6 +259,8 @@ int main(int argc, char* argv[])
             execve(args[0], args, envs);
         }    
     }
+    free(m_addr);
+    free(m_count);
   } else {
     // -> profile
     set_mode(PROFILE);
@@ -294,6 +298,9 @@ int main(int argc, char* argv[])
     map_iterator(it)->next();
   }
   map_iterator(it)->destroy();
+  log("\n");
+  log("\n");
+  log("FAINT finished successfully!\n");
  
   return 0;
 }
