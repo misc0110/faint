@@ -1,7 +1,11 @@
 all: oomt test
 
-oomt: oomt.c malloc_replace 
-	gcc oomt.c -Wall -gdwarf -o oomt
+oomt: oomt.o map.c malloc_replace 
+	gcc -Wall -g -c map.c -o map_c.o
+	gcc oomt.o map_c.o -Wall -g -o oomt
+
+oomt.o: oomt.c
+	gcc -c oomt.c -Wall -g -o oomt.o
 
 malloc_replace: malloc_replace.cpp map.o
 	g++ -Wall -fPIC -DPIC -c -g -fno-stack-protector -funwind-tables malloc_replace.cpp
@@ -12,7 +16,7 @@ map.o: map.c
 	ar rcs libcmap.a map.o
 	
 test: test.c
-	gcc test.c -Wall -funwind-tables -o test
+	gcc test.c -Wall -g -o test
 	
 clean:
 	-rm -f *.so *.o oomt test test_crash mallocs libcmap.a

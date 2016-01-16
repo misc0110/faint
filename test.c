@@ -12,12 +12,11 @@ int* do_mem(int size) {
     int i;
     for(i = 0; i < size; i++) {
       int* x = helper(size);   
-      x[0] = 4;
+      //x[0] = 4;
       free(x);
     }
     int* y = malloc(size * sizeof(int));
     if(!y) printf("Malloc (do_mem) failed\n");
-    y[0] = 2;
     return y;
 }
 

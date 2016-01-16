@@ -9,6 +9,7 @@ enum Mode {
 typedef struct {
     enum Mode mode;
     int limit;
+    char filename[256];
 } __attribute__((packed)) MallocSettings; 
 
 #endif

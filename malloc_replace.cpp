@@ -2,9 +2,11 @@
  * Shared library to let new fail after a given number of successful new 
  * calls. Used to test out-of-memory handling of programs.
  * 
- * 06/2013 by Michael Schwarz 
+ * 01/2016 by Michael Schwarz 
  *
  **/ 
+
+#include <string.h>
 #include "malloc_replace.h"
 #include "settings.h"
 #include "map.h"
@@ -16,8 +18,12 @@ static h_exit real_exit1 = NULL;
 
 static unsigned int is_backtrace = 0;
 
+void segfault_handler(int sig);
+
 static MallocSettings settings;
 map_declare(mallocs);
+
+void* current_malloc = NULL;
 
 #define get_malloc_address() __builtin_return_address(1)
 
@@ -37,7 +43,7 @@ static void _init(void)
     }
         
     is_backtrace = 1;
-    // read number of allowed mallocs from file
+    // read settings from file
     FILE *f = fopen("settings", "rb");
     if(f) 
     {
@@ -64,8 +70,18 @@ static void _init(void)
             }
         }
         fclose(f);
-        map(mallocs)->dump();
     }
+    
+    
+    // install signal handler
+    struct sigaction sig_handler;
+
+    sig_handler.sa_handler = segfault_handler;
+    sigemptyset(&sig_handler.sa_mask);
+    sig_handler.sa_flags = 0;
+    sigaction(SIGINT, &sig_handler, NULL);
+    sigaction(SIGSEGV, &sig_handler, NULL);
+
     is_backtrace = 0;
 }
 
@@ -82,14 +98,19 @@ void show_backtrace()
         printf("0x%x\n", p);
         */
         // get callee address
-        void* p = __builtin_return_address(2);
+        void* p = __builtin_return_address(1);
         is_backtrace = 1;
 
-        printf("0x%x\n", p);
+        //printf("0x%x\n", p);
         
         Dl_info info;
-        dladdr(p, &info);
-        printf("%s\n", info.dli_fname);
+        if(dladdr(p, &info)) {
+            //printf("%s\n", info.dli_fname);
+            if(info.dli_fname && strcmp(info.dli_fname, settings.filename) != 0) {
+                // not our file
+                return;
+            }
+        }
         
         if(!mallocs) map_initialize(mallocs, MAP_GENERAL);
         
@@ -121,7 +142,8 @@ void *malloc(size_t size)
       return real_malloc(size);
   }
 
-  void* addr = __builtin_return_address(1);
+  void* addr = __builtin_return_address(0);
+  current_malloc = addr;
   
   if(settings.mode == PROFILE ) {
     show_backtrace();
@@ -154,6 +176,49 @@ void _exit(int val) {
    printf("Done\n");
    real_exit1(val);   
 }
+
+void segfault_handler(int sig) {
+    is_backtrace = 1;
+    void* crash_addr = NULL;
+    
+    // find crash address in backtrace
+    int i, j, pos, nptrs;
+    void *buffer[100];
+    char addr_buffer[32];
+    char **strings;
+
+    nptrs = backtrace(buffer, 100);
+    strings = backtrace_symbols(buffer, nptrs);
+    if(strings) {
+        for (j = 0; j < nptrs; j++) {
+            if(strncmp(strings[j], settings.filename, strlen(settings.filename)) == 0) {
+                pos = 0;
+                while(strings[j][pos] != '[' && pos < strlen(strings[j])) pos++;
+                if(pos >= strlen(strings[j])) {
+                  // not found
+                  break;   
+                }
+                for(i = pos + 1; i < strlen(strings[j]); i++) {
+                  if(strings[j][i] == ']') break;
+                  addr_buffer[i - pos - 1] = strings[j][i];   
+                }
+                addr_buffer[i] = 0;
+                crash_addr = (void*)strtol(addr_buffer, NULL, 16);
+                break;
+            }
+        }
+
+        free(strings);
+    }
+    
+   // write crash report
+   FILE* f = fopen("crash", "wb");
+   fwrite(&current_malloc, sizeof(void*), 1, f);
+   fwrite(&crash_addr, sizeof(void*), 1, f);
+   fclose(f);
+   is_backtrace = 0;
+   real_exit1(sig);
+};
 
 /*
 //-----------------------------------------------------------------------------

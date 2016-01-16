@@ -6,7 +6,7 @@ void* _obj_addr[MAX_MAP_NESTING];
 int _obj_addr_pos = 0;
 
 extern void* _malloc(size_t);
-allocator map_allocate = _malloc;
+allocator map_allocate = malloc;
 
 #define this ((cmap*)_obj_addr[_obj_addr_pos - 1])
 #define thisit ((cmap_iterator*)_obj_addr[_obj_addr_pos - 1])
@@ -209,10 +209,10 @@ void* map_iterator_value() {
 
 // ---------------------------------------------------------------------------
 int map_iterator_end() {
-  if(thisit->current == NULL) {
+  if(thisit->current == NULL || thisit->position == thisit->obj->size) {
       objreturn 1;
   }
-  if(thisit->position == thisit->obj->size - 1 && thisit->current->next == NULL) {
+  if(thisit->position == thisit->obj->size - 1 && thisit->current == NULL) {
       objreturn 1; 
   }
   else {
