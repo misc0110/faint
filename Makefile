@@ -1,4 +1,4 @@
-all: oomt test
+all: oomt test testcpp
 
 oomt: oomt.o map.c malloc_replace 
 	gcc -Wall -g -c map.c -o map_c.o
@@ -13,14 +13,19 @@ malloc_replace: malloc_replace.cpp map.o
 
 map.o: map.c
 	g++ map.c -fPIC -DPIC -Wall -c -g -o map.o
-	ar rcs libcmap.a map.o
 	
 test: test.c
 	gcc test.c -Wall -g -o test
 	
+testcpp: test.cpp
+	g++ test.cpp -Wall -g -o testcpp
+	
 clean:
-	-rm -f *.so *.o oomt test test_crash mallocs libcmap.a
+	-rm -f *.so *.o oomt test mallocs profile settings testcpp
 	
 run: oomt test
 	./oomt test
+	
+runcpp: oomt testcpp
+	./oomt testcpp
 	

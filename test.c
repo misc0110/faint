@@ -5,6 +5,9 @@ int *helper(int size) {
    printf("Helper\n");
    int* v = malloc(size * sizeof(int));
    if(!v) printf("Malloc (helper) failed\n");
+   int* v2 = calloc(size, sizeof(int));
+   v2[1] = 3;
+   free(v2);
    return v;   
 }
 

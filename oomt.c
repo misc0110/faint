@@ -101,11 +101,11 @@ int get_file_and_line (char* binary, void* addr, char *file, int *line, char* fu
 
   // prepare command to be executed
   // our program need to be passed after the -e parameter
-  sprintf (buf, "/usr/bin/addr2line -C -e %s -s -f -i %lx", binary, (size_t)addr);
+  sprintf (buf, "addr2line -C -e %s -s -f -i %lx", binary, (size_t)addr);
   FILE* f = popen (buf, "r");
 
   if (f == NULL) {
-    perror (buf);
+    log("Could not resolve address %p, do you have addr2line installed?\n", addr);
     return 0;
   }
 
@@ -155,6 +155,13 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
+  FILE* so = fopen("malloc_replace.so", "rb");
+  if(!so) {
+    log("Could not find 'malloc_replace.so'. Aborting.\n");
+    exit(1);
+  }
+  fclose(so);
+  
   // preload malloc replacement
   char* const envs[] = {(char*)"LD_PRELOAD=./malloc_replace.so", NULL};
   char* args[argc];
@@ -301,7 +308,7 @@ int main(int argc, char* argv[]) {
             clear_crash_report();
             set_mode(INJECT);
             set_limit(i);
-            execvpe(args[0], args, envs);
+            execve(args[0], args, envs);
             log("Could not execute %s\n", args[0]);
             exit(0);
         }    
@@ -311,7 +318,7 @@ int main(int argc, char* argv[]) {
   } else {
     // -> profile
     set_mode(PROFILE);
-    execvpe(args[0], args, envs);
+    execve(args[0], args, envs);
     log("Could not execute %s\n", args[0]);
     exit(0);
   }
