@@ -7,6 +7,8 @@
  *
  **/ 
 
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -127,6 +129,10 @@ int get_file_and_line (char* binary, void* addr, char *file, int *line, char* fu
     // file name is until ':'
     while (*p != ':') {
       p++;
+      if((p - buf) >= 256) {
+         pclose(f);
+         return 0;
+      }
     }
 
     *p++ = 0;
@@ -134,7 +140,7 @@ int get_file_and_line (char* binary, void* addr, char *file, int *line, char* fu
     strcpy (file , buf);
     sscanf (p,"%d", line);
   } else {
-    strcpy (file,"unkown");
+    strcpy (file,"unknown");
     *line = 0;
   }
 
@@ -164,6 +170,12 @@ int main(int argc, char* argv[]) {
   
   // fork first to profile
   log("Profiling start\n");
+  FILE* f = fopen("profile", "wb");
+  if(!f) {
+    log("Need write access to file 'profile'!\n");
+    exit(1);
+  }
+  fclose(f);
  
   map_create(crashes, MAP_GENERAL);
   int crash_count = 0;
@@ -171,12 +183,22 @@ int main(int argc, char* argv[]) {
 
   pid_t p = fork();
   if(p) {
-    waitpid(p, NULL, 0);
+    int status;
+    waitpid(p, &status, 0);
+    if(!WIFEXITED(status)) {
+      log("There was an error while profiling, aborting now\n");
+      exit(1);
+    }
+    
     log("Profiling done\n");
     // profiling done, fork to inject
     int calls = 0, mallocs;
     
     FILE* f = fopen("profile", "rb");
+    if(!f) {
+      log("No trace generated, aborting now\n");
+      exit(1);
+    }
     fseek(f, 0, SEEK_END);
     size_t fsize = ftell(f);
     mallocs = fsize / (2 * sizeof(size_t));
@@ -199,8 +221,11 @@ int main(int argc, char* argv[]) {
     for(i = 0; i < mallocs; i++) {
       char m_file[256], m_function[256];
       int m_line;
-      get_file_and_line(args[0], (void*)(m_addr[i]), m_file, &m_line, m_function);
-      log(" >  %s in %s line %d: %d calls\n", m_function, m_file, m_line, m_count[i]);
+      if(get_file_and_line(args[0], (void*)(m_addr[i]), m_file, &m_line, m_function)) {
+        log(" >  %s in %s line %d: %d calls\n", m_function, m_file, m_line, m_count[i]);
+      } else {
+        log(" > N/A (maybe you forgot to compile with -g?)\n");
+      }
     }
     log("\n");
     
@@ -230,11 +255,14 @@ int main(int argc, char* argv[]) {
                 char crash_file[256], malloc_file[256], crash_fnc[256], malloc_fnc[256];
                 int crash_line, malloc_line;
                 log("Crashed at %p, caused by %p\n", crash, m);
-                get_file_and_line(args[0], crash, crash_file, &crash_line, crash_fnc);
-                get_file_and_line(args[0], m, malloc_file, &malloc_line, malloc_fnc);
-                log("Crash details: \n");
-                log(" > Crash: %s (%s) @ %d\n", crash_fnc, crash_file, crash_line);
-                log(" > Malloc: %s (%s) @ %d\n", malloc_fnc, malloc_file, malloc_line);
+                if(get_file_and_line(args[0], crash, crash_file, &crash_line, crash_fnc)
+                    && get_file_and_line(args[0], m, malloc_file, &malloc_line, malloc_fnc)) {
+                  log("Crash details: \n");
+                  log(" > Crash: %s (%s) @ %d\n", crash_fnc, crash_file, crash_line);
+                  log(" > Malloc: %s (%s) @ %d\n", malloc_fnc, malloc_file, malloc_line);
+                } else {
+                  log("No crash details available (maybe you forgot to compile with -g?)\n");   
+                }
                 map(crashes)->set(crash, m);
                 crash_count++;
             } else {
@@ -248,15 +276,20 @@ int main(int argc, char* argv[]) {
             log("Fault position:\n");
             char m_file[256], m_function[256];
             int m_line;
-            get_file_and_line(args[0], (void*)(m_addr[i]), m_file, &m_line, m_function);
-            log(" >  %s in %s line %d\n", m_function, m_file, m_line);
+            if(get_file_and_line(args[0], (void*)(m_addr[i]), m_file, &m_line, m_function)) {
+                log(" >  %s in %s line %d\n", m_function, m_file, m_line);
+            } else {
+                log("Position not available (maybe you forgot to compile with -g?)\n");   
+            }
             log("\n");
             
             // -> inject
             clear_crash_report();
             set_mode(INJECT);
             set_limit(i);
-            execve(args[0], args, envs);
+            execvpe(args[0], args, envs);
+            log("Could not execute %s\n", args[0]);
+            exit(0);
         }    
     }
     free(m_addr);
@@ -264,7 +297,9 @@ int main(int argc, char* argv[]) {
   } else {
     // -> profile
     set_mode(PROFILE);
-    execve(args[0], args, envs);
+    execvpe(args[0], args, envs);
+    log("Could not execute %s\n", args[0]);
+    exit(0);
   }
   log("\n");
   log("======= SUMMARY =======\n");
@@ -291,10 +326,14 @@ int main(int argc, char* argv[]) {
     int crash_line, malloc_line;
     log("\n");
     log("Crashed at %p, caused by %p\n", crash, m);
-    get_file_and_line(args[0], crash, crash_file, &crash_line, crash_fnc);
-    get_file_and_line(args[0], m, malloc_file, &malloc_line, malloc_fnc);
-    log("   > Crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
-    log("   > Malloc: %s (%s) line %d\n", malloc_fnc, malloc_file, malloc_line);
+    if(get_file_and_line(args[0], crash, crash_file, &crash_line, crash_fnc) &&
+        get_file_and_line(args[0], m, malloc_file, &malloc_line, malloc_fnc)) {
+        log("   > Crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
+        log("   > Malloc: %s (%s) line %d\n", malloc_fnc, malloc_file, malloc_line);
+    } else {
+        log("   > N/A (maybe you forgot to compile with -g?)\n");
+    }
+    
     map_iterator(it)->next();
   }
   map_iterator(it)->destroy();
