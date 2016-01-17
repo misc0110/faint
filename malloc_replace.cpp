@@ -25,6 +25,7 @@ void segfault_handler(int sig);
 
 static MallocSettings settings;
 map_declare(mallocs);
+map_declare(types);
 
 void* current_malloc = NULL;
 
@@ -55,6 +56,8 @@ static void _init(void) {
   if(settings.mode == INJECT) {
     if(!mallocs)
       map_initialize(mallocs, MAP_GENERAL);
+    if(!types)
+      map_initialize(types, MAP_GENERAL);
 
     // read profile
     f = fopen("profile", "rb");
@@ -63,8 +66,10 @@ static void _init(void) {
       while(!feof(f)) {
         void* addr;
         void* cnt;
+        void* type;
         fread(&addr, sizeof(void*), 1, f);
-        if(fread(&cnt, sizeof(void*), 1, f) == 0)
+        fread(&cnt, sizeof(void*), 1, f);
+        if(fread(&type, sizeof(void*), 1, f) == 0)
           break;
         //printf("%x -> %d\n", addr, cnt);
         if(entry == settings.limit)
@@ -72,6 +77,7 @@ static void _init(void) {
         else
           cnt = (void*) 0;
         map(mallocs)->set(addr, cnt);
+        map(types)->set(addr, type);
         entry++;
       }
     }
@@ -89,6 +95,25 @@ static void _init(void) {
   sigaction(SIGABRT, &sig_handler, NULL);
 
   is_backtrace = 0;
+}
+
+//-----------------------------------------------------------------------------
+size_t get_module_id(const char* module) {
+  size_t i;
+  for(i = 0; i < MODULE_COUNT; i++) {
+    if(!strcmp(module, modules[i])) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+//-----------------------------------------------------------------------------
+int module_active(const char* module) {
+  int id = get_module_id(module);
+  if(id == -1)
+    return 0;
+  return !!(settings.modules & (1 << id));
 }
 
 //-----------------------------------------------------------------------------
@@ -144,7 +169,7 @@ void* get_return_address(int index) {
 }
 
 //-----------------------------------------------------------------------------
-void save_trace() {
+void save_trace(const char* type) {
   // get callee address
   is_backtrace = 1;
   void* p = get_return_address(0); //__builtin_return_address(1);
@@ -163,12 +188,15 @@ void save_trace() {
 
   if(!mallocs)
     map_initialize(mallocs, MAP_GENERAL);
+  if(!types)
+    map_initialize(types, MAP_GENERAL);
 
   if(map(mallocs)->has(p)) {
     map(mallocs)->set(p, (void*) ((size_t) (map(mallocs)->get(p)) + 1));
   } else {
     map(mallocs)->set(p, (void*) 1);
   }
+  map(types)->set(p, (void*) get_module_id(type));
 
   FILE* f = fopen("profile", "wb");
   cmap_iterator* it = map(mallocs)->iterator();
@@ -177,6 +205,8 @@ void save_trace() {
     void* v = map_iterator(it)->value();
     fwrite(&k, sizeof(void*), 1, f);
     fwrite(&v, sizeof(void*), 1, f);
+    void* type = map(types)->get(k);
+    fwrite(&type, sizeof(void*), 1, f);
     map_iterator(it)->next();
   }
   map_iterator(it)->destroy();
@@ -188,6 +218,10 @@ void *malloc(size_t size) {
   if(real_malloc == NULL)
     _init();
 
+  if(!module_active("malloc")) {
+    return real_malloc(size);
+  }
+
   if(is_backtrace) {
     return real_malloc(size);
   }
@@ -196,7 +230,7 @@ void *malloc(size_t size) {
   current_malloc = addr;
 
   if(settings.mode == PROFILE) {
-    save_trace();
+    save_trace("malloc");
     return real_malloc(size);
   } else if(settings.mode == INJECT) {
     if(!map(mallocs)->has(addr)) {
@@ -221,6 +255,10 @@ void *realloc(void* mem, size_t size) {
   if(real_realloc == NULL)
     _init();
 
+  if(!module_active("realloc")) {
+    return real_realloc(mem, size);
+  }
+
   if(is_backtrace) {
     return real_realloc(mem, size);
   }
@@ -229,7 +267,7 @@ void *realloc(void* mem, size_t size) {
   current_malloc = addr;
 
   if(settings.mode == PROFILE) {
-    save_trace();
+    save_trace("realloc");
     return real_realloc(mem, size);
   } else if(settings.mode == INJECT) {
     if(!map(mallocs)->has(addr)) {
@@ -254,6 +292,10 @@ void *calloc(size_t elem, size_t size) {
   if(real_calloc == NULL)
     _init();
 
+  if(!module_active("calloc")) {
+    return real_calloc(elem, size);
+  }
+
   if(is_backtrace) {
     return real_calloc(elem, size);
   }
@@ -262,7 +304,7 @@ void *calloc(size_t elem, size_t size) {
   current_malloc = addr;
 
   if(settings.mode == PROFILE) {
-    save_trace();
+    save_trace("calloc");
     return real_calloc(elem, size);
   } else if(settings.mode == INJECT) {
     if(!map(mallocs)->has(addr)) {
@@ -282,9 +324,14 @@ void *calloc(size_t elem, size_t size) {
   return NULL;
 }
 
+//-----------------------------------------------------------------------------
 void* operator new(size_t size) {
   if(real_malloc == NULL)
     _init();
+
+  if(!module_active("new")) {
+    return real_malloc(size);
+  }
 
   if(is_backtrace) {
     return real_malloc(size);
@@ -294,7 +341,7 @@ void* operator new(size_t size) {
   current_malloc = addr;
 
   if(settings.mode == PROFILE) {
-    save_trace();
+    save_trace("new");
     return real_malloc(size);
   } else if(settings.mode == INJECT) {
     if(!map(mallocs)->has(addr)) {

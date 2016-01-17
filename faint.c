@@ -29,9 +29,8 @@
 
 MallocSettings settings;
 
-extern uint8_t malloc_lib[]     asm("_binary_malloc_replace_so_start");
+extern uint8_t malloc_lib[] asm("_binary_malloc_replace_so_start");
 extern uint8_t malloc_lib_end[] asm("_binary_malloc_replace_so_end");
-
 
 // ---------------------------------------------------------------------------
 void write_settings() {
@@ -59,6 +58,34 @@ void set_filename(char* fn) {
   strncpy(settings.filename, fn, 255);
   settings.filename[255] = 0;
   write_settings();
+}
+
+// ---------------------------------------------------------------------------
+void enable_module(char* m) {
+  int i;
+  for(i = 0; i < MODULE_COUNT; i++) {
+    if(!strcmp(m, modules[i])) {
+      settings.modules |= (1 << i);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+void disable_module(char* m) {
+  int i;
+  for(i = 0; i < MODULE_COUNT; i++) {
+    if(!strcmp(m, modules[i])) {
+      settings.modules &= ~(1 << i);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+void list_modules() {
+  int i;
+  for(i = 0; i < MODULE_COUNT; i++) {
+    printf("%s\n", modules[i]);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -170,17 +197,20 @@ void cleanup() {
 // ---------------------------------------------------------------------------
 int main(int argc, char* argv[]) {
   if(argc <= 1) {
-    printf("Usage: %s <binary to test> [arg1] [...]\n", argv[0]);
+    printf("Usage: %s [--enable [module] --disable [module] --list-modules] <binary to test> [arg1] [...]\n", argv[0]);
+    printf("\n");
+    printf("--list-modules\t Lists all available modules which can be enabled/disabled\n\n");
+    printf("--enable [module]\t Enables the module\n\n");
+    printf("--disable [module]\t Disables the module\n\n");
     return 0;
   }
   atexit(cleanup);
-
 
   log("Starting, Version 1.0\n");
   log("\n");
 
   // extract malloc replace library
-  size_t malloc_lib_size = (size_t)((char*)malloc_lib_end - (char*)malloc_lib);
+  size_t malloc_lib_size = (size_t) ((char*) malloc_lib_end - (char*) malloc_lib);
 
   FILE* so = fopen("./malloc_replace.so", "wb");
   if(!so) {
@@ -198,15 +228,50 @@ int main(int argc, char* argv[]) {
   char* const envs[] = { (char*) "LD_PRELOAD=./malloc_replace.so", NULL };
   char* args[argc];
 
-  // inherit all arguments
-  int i;
-  for(i = 0; i < argc - 1; i++) {
-    if(i > 0) {
-      log(" Param %2d: %s\n", i, argv[i + 1]);
+  // modules enabled by default
+  enable_module("malloc");
+  enable_module("calloc");
+  enable_module("realloc");
+  enable_module("new");
+
+  // parse commandline
+  int i, binary_pos = 0;
+  for(i = 1; i < argc; i++) {
+    if(strncmp(argv[i], "--", 2) == 0) {
+      char* cmd = &argv[i][2];
+      if(!strcmp(cmd, "list-modules")) {
+        list_modules();
+      } else if(!strcmp(cmd, "enable") && i != argc - 1) {
+        enable_module(argv[i + 1]);
+        i++;
+      } else if(!strcmp(cmd, "disable") && i != argc - 1) {
+        disable_module(argv[i + 1]);
+        i++;
+      } else {
+        log("Unknown command: %s\n", cmd);
+        exit(1);
+      }
     } else {
-      log("Binary: %s\n", argv[i + 1]);
+      binary_pos = i;
+      break;
     }
-    args[i] = argv[i + 1];
+  }
+  write_settings();
+  for(i = 0; i < MODULE_COUNT; i++) {
+    if(settings.modules & (1 << i)) {
+      log("Activate module '%s'\n", modules[i]);
+    }
+  }
+  log("\n");
+
+  // inherit all arguments
+  for(i = 0; i < argc - binary_pos; i++) {
+    if(i > 0) {
+      log(" Param %2d: %s\n", i, argv[i + binary_pos]);
+    } else {
+      log("Binary: %s\n", argv[i + binary_pos]);
+    }
+    args[i] = argv[i + binary_pos];
   }
   args[i] = NULL;
   log("\n");
@@ -244,8 +309,9 @@ int main(int argc, char* argv[]) {
   fclose(f);
 
   map_create(crashes, MAP_GENERAL);
+  map_create(types, MAP_GENERAL);
   int crash_count = 0;
-  int injections;
+  int injections = 0;
 
   pid_t p = fork();
   if(p) {
@@ -258,7 +324,7 @@ int main(int argc, char* argv[]) {
 
     log("Profiling done\n");
     // profiling done, fork to inject
-    int calls = 0, mallocs;
+    int calls = 0;
 
     FILE* f = fopen("profile", "rb");
     if(!f) {
@@ -267,27 +333,29 @@ int main(int argc, char* argv[]) {
     }
     fseek(f, 0, SEEK_END);
     size_t fsize = ftell(f);
-    mallocs = fsize / (2 * sizeof(size_t));
+    injections = fsize / (3 * sizeof(size_t));
     fseek(f, 0, SEEK_SET);
 
-    size_t* m_addr = malloc(sizeof(size_t) * mallocs);
-    size_t* m_count = malloc(sizeof(size_t) * mallocs);
+    size_t* m_addr = malloc(sizeof(size_t) * injections);
+    size_t* m_count = malloc(sizeof(size_t) * injections);
+    size_t* m_type = malloc(sizeof(size_t) * injections);
 
-    for(i = 0; i < mallocs; i++) {
+    for(i = 0; i < injections; i++) {
       fread(&m_addr[i], sizeof(size_t), 1, f);
       fread(&m_count[i], sizeof(size_t), 1, f);
+      fread(&m_type[i], sizeof(size_t), 1, f);
+      map(types)->set((void*) m_addr[i], (void*) m_type[i]);
       calls += m_count[i];
     }
     fclose(f);
 
-    log("Found %d different mallocs with %d call(s)\n", mallocs, calls);
+    log("Found %d different injection positions with %d call(s)\n", injections, calls);
 
-    injections = mallocs;
-    for(i = 0; i < mallocs; i++) {
+    for(i = 0; i < injections; i++) {
       char m_file[256], m_function[256];
       int m_line;
       if(get_file_and_line(args[0], (void*) (m_addr[i]), m_file, &m_line, m_function)) {
-        log(" >  %s in %s line %d: %d calls\n", m_function, m_file, m_line, m_count[i]);
+        log(" >  [%s] %s in %s line %d: %d calls \n", modules[m_type[i]], m_function, m_file, m_line, m_count[i]);
       } else {
         log(" > N/A (maybe you forgot to compile with -g?)\n");
       }
@@ -295,10 +363,10 @@ int main(int argc, char* argv[]) {
     log("\n");
 
     // let one specific malloc fail per loop iteration
-    log("Injecting %d faults, one for every malloc\n", injections);
+    log("Injecting %d faults, one for every injection position\n", injections);
     log("\n");
 
-    for(i = 0; i < mallocs; i++) {
+    for(i = 0; i < injections; i++) {
       p = fork();
       if(p) {
         int status, killed = 0;
@@ -320,12 +388,12 @@ int main(int argc, char* argv[]) {
         if(has_addr) {
           char crash_file[256], malloc_file[256], crash_fnc[256], malloc_fnc[256];
           int crash_line, malloc_line;
-          log("Crashed at %p, caused by %p\n", crash, m);
+          log("Crashed at %p, caused by %p [%s]\n", crash, m, modules[(size_t) map(types)->get(m)]);
           if(get_file_and_line(args[0], crash, crash_file, &crash_line, crash_fnc)
               && get_file_and_line(args[0], m, malloc_file, &malloc_line, malloc_fnc)) {
             log("Crash details: \n");
-            log(" > Crash: %s (%s) @ %d\n", crash_fnc, crash_file, crash_line);
-            log(" > Malloc: %s (%s) @ %d\n", malloc_fnc, malloc_file, malloc_line);
+            log(" > crash: %s (%s) @ %d\n", crash_fnc, crash_file, crash_line);
+            log(" > %s: %s (%s) @ %d\n", modules[(size_t) map(types)->get(m)], malloc_fnc, malloc_file, malloc_line);
           } else {
             log("No crash details available (maybe you forgot to compile with -g?)\n");
           }
@@ -344,7 +412,7 @@ int main(int argc, char* argv[]) {
         char m_file[256], m_function[256];
         int m_line;
         if(get_file_and_line(args[0], (void*) (m_addr[i]), m_file, &m_line, m_function)) {
-          log(" >  %s in %s line %d\n", m_function, m_file, m_line);
+          log(" >  [%s] %s in %s line %d\n", modules[m_type[i]], m_function, m_file, m_line);
         } else {
           log("Position not available (maybe you forgot to compile with -g?)\n");
         }
@@ -394,11 +462,11 @@ int main(int argc, char* argv[]) {
       char crash_file[256], malloc_file[256], crash_fnc[256], malloc_fnc[256];
       int crash_line, malloc_line;
       log("\n");
-      log("Crashed at %p, caused by %p\n", crash, m);
+      log("Crashed at %p, caused by %p [%s]\n", crash, m, modules[(size_t) map(types)->get(m)]);
       if(get_file_and_line(args[0], crash, crash_file, &crash_line, crash_fnc)
           && get_file_and_line(args[0], m, malloc_file, &malloc_line, malloc_fnc)) {
-        log("   > Crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
-        log("   > Malloc: %s (%s) line %d\n", malloc_fnc, malloc_file, malloc_line);
+        log("   > crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
+        log("   > %s: %s (%s) line %d\n", modules[(size_t) map(types)->get(m)], malloc_fnc, malloc_file, malloc_line);
       } else {
         log("   > N/A (maybe you forgot to compile with -g?)\n");
       }
