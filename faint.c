@@ -81,14 +81,6 @@ void disable_module(char* m) {
 }
 
 // ---------------------------------------------------------------------------
-void list_modules() {
-  int i;
-  for(i = 0; i < MODULE_COUNT; i++) {
-    printf("%s\n", modules[i]);
-  }
-}
-
-// ---------------------------------------------------------------------------
 void log(const char *format, ...) {
   static int count = 0;
   time_t timer;
@@ -113,6 +105,15 @@ void log(const char *format, ...) {
   fclose(f);
   va_end(args);
   count++;
+}
+
+// ---------------------------------------------------------------------------
+void list_modules() {
+  int i;
+  log("Available modules:\n");
+  for(i = 0; i < MODULE_COUNT; i++) {
+    log(" > %s\n", modules[i]);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -192,24 +193,24 @@ void cleanup() {
   remove("profile");
   remove("crash");
   remove("malloc_replace.so");
+  log("\n");
+  log("\n");
+  log("finished successfully!\n");
 }
 
 // ---------------------------------------------------------------------------
-int main(int argc, char* argv[]) {
-  if(argc <= 1) {
-    printf("Usage: %s [--enable [module] --disable [module] --list-modules] <binary to test> [arg1] [...]\n", argv[0]);
-    printf("\n");
-    printf("--list-modules\t Lists all available modules which can be enabled/disabled\n\n");
-    printf("--enable [module]\t Enables the module\n\n");
-    printf("--disable [module]\t Disables the module\n\n");
-    return 0;
-  }
-  atexit(cleanup);
+void usage(char* binary) {
+  printf("Usage: %s [--enable [module] --disable [module] --list-modules --no-memory] <binary to test> [arg1] [...]\n",
+      binary);
+  printf("\n");
+  printf("--list-modules\t Lists all available modules which can be enabled/disabled\n\n");
+  printf("--enable [module]\t Enables the module\n\n");
+  printf("--disable [module]\t Disables the module\n\n");
+  printf("--no-memory\t Disable all memory allocation modules");
+}
 
-  log("Starting, Version 1.0\n");
-  log("\n");
-
-  // extract malloc replace library
+// ---------------------------------------------------------------------------
+void extract_shared_library() {
   size_t malloc_lib_size = (size_t) ((char*) malloc_lib_end - (char*) malloc_lib);
 
   FILE* so = fopen("./malloc_replace.so", "wb");
@@ -223,30 +224,36 @@ int main(int argc, char* argv[]) {
     exit(1);
   }
   fclose(so);
+}
 
-  // preload malloc replacement
-  char* const envs[] = { (char*) "LD_PRELOAD=./malloc_replace.so", NULL };
-  char* args[argc];
-
-  // modules enabled by default
+// ---------------------------------------------------------------------------
+void enable_default_modules() {
   enable_module("malloc");
   enable_module("calloc");
   enable_module("realloc");
   enable_module("new");
+}
 
-  // parse commandline
+// ---------------------------------------------------------------------------
+int parse_commandline(int argc, char* argv[]) {
   int i, binary_pos = 0;
   for(i = 1; i < argc; i++) {
     if(strncmp(argv[i], "--", 2) == 0) {
       char* cmd = &argv[i][2];
       if(!strcmp(cmd, "list-modules")) {
         list_modules();
+        exit(0);
       } else if(!strcmp(cmd, "enable") && i != argc - 1) {
         enable_module(argv[i + 1]);
         i++;
       } else if(!strcmp(cmd, "disable") && i != argc - 1) {
         disable_module(argv[i + 1]);
         i++;
+      } else if(!strcmp(cmd, "no-memory")) {
+        disable_module("malloc");
+        disable_module("calloc");
+        disable_module("realloc");
+        disable_module("new");
       } else {
         log("Unknown command: %s\n", cmd);
         exit(1);
@@ -263,8 +270,134 @@ int main(int argc, char* argv[]) {
     }
   }
   log("\n");
+  return binary_pos;
+}
+
+// ---------------------------------------------------------------------------
+void check_debug_symbols(char* binary) {
+  char re_cmdline[256];
+  sprintf(re_cmdline, "readelf --debug-dump=line \"%s\" | wc -l", binary);
+  FILE* dbg = popen(re_cmdline, "r");
+  if(dbg) {
+    char debug_lines[32];
+    fgets(debug_lines, 32, dbg);
+    if(atoi(debug_lines) == 0) {
+      log("Could not find debugging info! Did you compile with -g?\n");
+      log("\n");
+    }
+    pclose(dbg);
+  }
+}
+
+// ---------------------------------------------------------------------------
+void disable_aslr() {
+  if(personality(ADDR_NO_RANDOMIZE) == -1) {
+    log("Could not turn off ASLR: %s\n", strerror(errno));
+  } else {
+    log("ASLR turned off successfully\n");
+  }
+}
+
+// ---------------------------------------------------------------------------
+void summary(char* binary, int crash_count, int injections, cmap* crashes, cmap* types) {
+  log("\n");
+  log("======= SUMMARY =======\n");
+  log("\n");
+  log("Crashed at %d from %d injections\n", crash_count, injections);
+
+  int unique = 0;
+  cmap_iterator* it = map(crashes)->iterator();
+  while(!map_iterator(it)->end()) {
+    unique++;
+    map_iterator(it)->next();
+  }
+  map_iterator(it)->destroy();
+
+  log("Unique crashes: %d\n", unique);
+  log("\n");
+
+  if(crash_count > 0) {
+    log("Crash details:\n");
+
+    it = map(crashes)->iterator();
+    while(!map_iterator(it)->end()) {
+      void* crash = map_iterator(it)->key();
+      void* m = map_iterator(it)->value();
+      char crash_file[256], malloc_file[256], crash_fnc[256], malloc_fnc[256];
+      int crash_line, malloc_line;
+      log("\n");
+      log("Crashed at %p, caused by %p [%s]\n", crash, m, modules[(size_t) map(types)->get(m)]);
+      if(get_file_and_line(binary, crash, crash_file, &crash_line, crash_fnc)
+          && get_file_and_line(binary, m, malloc_file, &malloc_line, malloc_fnc)) {
+        log("   > crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
+        log("   > %s: %s (%s) line %d\n", modules[(size_t) map(types)->get(m)], malloc_fnc, malloc_file, malloc_line);
+      } else {
+        log("   > N/A (maybe you forgot to compile with -g?)\n");
+      }
+
+      map_iterator(it)->next();
+    }
+    map_iterator(it)->destroy();
+  } else {
+    log("Everything ok, no crashes detected!\n");
+  }
+}
+
+int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls, cmap* types) {
+
+  FILE* f = fopen("profile", "rb");
+  if(!f) {
+    log("No trace generated, aborting now\n");
+    exit(1);
+  }
+  fseek(f, 0, SEEK_END);
+  size_t fsize = ftell(f);
+  size_t injections = fsize / (3 * sizeof(size_t));
+  fseek(f, 0, SEEK_SET);
+
+  *addr = malloc(sizeof(size_t) * injections);
+  *count = malloc(sizeof(size_t) * injections);
+  *type = malloc(sizeof(size_t) * injections);
+
+  int i;
+  *calls = 0;
+  for(i = 0; i < injections; i++) {
+    fread(&((*addr)[i]), sizeof(size_t), 1, f);
+    fread(&((*count)[i]), sizeof(size_t), 1, f);
+    fread(&((*type)[i]), sizeof(size_t), 1, f);
+    map(types)->set((void*) addr[i], (void*) type[i]);
+    (*calls) += (*count)[i];
+  }
+  fclose(f);
+  return injections;
+}
+
+// ---------------------------------------------------------------------------
+int main(int argc, char* argv[]) {
+  if(argc <= 1) {
+    usage(argv[0]);
+    return 0;
+  }
+  atexit(cleanup);
+
+  log("Starting, Version 1.0\n");
+  log("\n");
+
+  // extract malloc replace library
+  extract_shared_library();
+
+  // modules enabled by default
+  enable_default_modules();
+
+  // parse commandline
+  int binary_pos = parse_commandline(argc, argv);
+
+  // preload malloc replacement
+  char* const envs[] = { (char*) "LD_PRELOAD=./malloc_replace.so", NULL };
+  char* args[argc];
 
   // inherit all arguments
+  int i;
   for(i = 0; i < argc - binary_pos; i++) {
     if(i > 0) {
       log(" Param %2d: %s\n", i, argv[i + binary_pos]);
@@ -279,25 +412,10 @@ int main(int argc, char* argv[]) {
   set_filename(args[0]);
 
   // check if compiled with debug symbols
-  char re_cmdline[256];
-  sprintf(re_cmdline, "readelf --debug-dump=line \"%s\" | wc -l", args[0]);
-  FILE* dbg = popen(re_cmdline, "r");
-  if(dbg) {
-    char debug_lines[32];
-    fgets(debug_lines, 32, dbg);
-    if(atoi(debug_lines) == 0) {
-      log("Could not find debugging info! Did you compile with -g?\n");
-      log("\n");
-    }
-    pclose(dbg);
-  }
+  check_debug_symbols(args[0]);
 
   // disable aslr to always get correct debug infos over multiple injection runs
-  if(personality(ADDR_NO_RANDOMIZE) == -1) {
-    log("Could not turn off ASLR: %s\n", strerror(errno));
-  } else {
-    log("ASLR turned off successfully\n");
-  }
+  disable_aslr();
 
   // fork first to profile
   log("Profiling start\n");
@@ -324,30 +442,10 @@ int main(int argc, char* argv[]) {
 
     log("Profiling done\n");
     // profiling done, fork to inject
-    int calls = 0;
+    size_t calls = 0;
 
-    FILE* f = fopen("profile", "rb");
-    if(!f) {
-      log("No trace generated, aborting now\n");
-      exit(1);
-    }
-    fseek(f, 0, SEEK_END);
-    size_t fsize = ftell(f);
-    injections = fsize / (3 * sizeof(size_t));
-    fseek(f, 0, SEEK_SET);
-
-    size_t* m_addr = malloc(sizeof(size_t) * injections);
-    size_t* m_count = malloc(sizeof(size_t) * injections);
-    size_t* m_type = malloc(sizeof(size_t) * injections);
-
-    for(i = 0; i < injections; i++) {
-      fread(&m_addr[i], sizeof(size_t), 1, f);
-      fread(&m_count[i], sizeof(size_t), 1, f);
-      fread(&m_type[i], sizeof(size_t), 1, f);
-      map(types)->set((void*) m_addr[i], (void*) m_type[i]);
-      calls += m_count[i];
-    }
-    fclose(f);
+    size_t *m_addr, *m_count, *m_type;
+    injections = parse_profiling(&m_addr, &m_count, &m_type, &calls, types);
 
     log("Found %d different injection positions with %d call(s)\n", injections, calls);
 
@@ -429,6 +527,7 @@ int main(int argc, char* argv[]) {
     }
     free(m_addr);
     free(m_count);
+    free(m_type);
   } else {
     // -> profile
     set_mode(PROFILE);
@@ -436,51 +535,9 @@ int main(int argc, char* argv[]) {
     log("Could not execute %s\n", args[0]);
     exit(0);
   }
-  log("\n");
-  log("======= SUMMARY =======\n");
-  log("\n");
-  log("Crashed at %d from %d injections\n", crash_count, injections);
 
-  int unique = 0;
-  cmap_iterator* it = map(crashes)->iterator();
-  while(!map_iterator(it)->end()) {
-    unique++;
-    map_iterator(it)->next();
-  }
-  map_iterator(it)->destroy();
+  summary(args[0], crash_count, injections, crashes, types);
 
-  log("Unique crashes: %d\n", unique);
-  log("\n");
-
-  if(crash_count > 0) {
-    log("Crash details:\n");
-
-    it = map(crashes)->iterator();
-    while(!map_iterator(it)->end()) {
-      void* crash = map_iterator(it)->key();
-      void* m = map_iterator(it)->value();
-      char crash_file[256], malloc_file[256], crash_fnc[256], malloc_fnc[256];
-      int crash_line, malloc_line;
-      log("\n");
-      log("Crashed at %p, caused by %p [%s]\n", crash, m, modules[(size_t) map(types)->get(m)]);
-      if(get_file_and_line(args[0], crash, crash_file, &crash_line, crash_fnc)
-          && get_file_and_line(args[0], m, malloc_file, &malloc_line, malloc_fnc)) {
-        log("   > crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
-        log("   > %s: %s (%s) line %d\n", modules[(size_t) map(types)->get(m)], malloc_fnc, malloc_file, malloc_line);
-      } else {
-        log("   > N/A (maybe you forgot to compile with -g?)\n");
-      }
-
-      map_iterator(it)->next();
-    }
-    map_iterator(it)->destroy();
-  } else {
-    log("Everything ok, no crashes detected!\n");
-  }
   map(crashes)->destroy();
-  log("\n");
-  log("\n");
-  log("finished successfully!\n");
-
   return 0;
 }
