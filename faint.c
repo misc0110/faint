@@ -200,10 +200,11 @@ int main(int argc, char* argv[]) {
 
   // inherit all arguments
   int i;
-  log("Binary: %s\n", argv[0]);
   for(i = 0; i < argc - 1; i++) {
     if(i > 0) {
       log(" Param %2d: %s\n", i, argv[i + 1]);
+    } else {
+      log("Binary: %s\n", argv[i + 1]);
     }
     args[i] = argv[i + 1];
   }
