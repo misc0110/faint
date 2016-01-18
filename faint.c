@@ -27,10 +27,20 @@
 #define personality(pers) ((long)syscall(SYS_personality, pers))
 #endif
 
+#define ANSI_COLOR_RED     "\x1b[31m"
+#define ANSI_COLOR_GREEN   "\x1b[32m"
+#define ANSI_COLOR_YELLOW  "\x1b[33m"
+#define ANSI_COLOR_BLUE    "\x1b[34m"
+#define ANSI_COLOR_MAGENTA "\x1b[35m"
+#define ANSI_COLOR_CYAN    "\x1b[36m"
+#define ANSI_COLOR_RESET   "\x1b[0m"
+
 FaultSettings settings;
 
 extern uint8_t fault_lib[] asm("_binary_fault_inject_so_start");
 extern uint8_t fault_lib_end[] asm("_binary_fault_inject_so_end");
+
+int colorlog = 0;
 
 // ---------------------------------------------------------------------------
 void write_settings() {
@@ -116,6 +126,13 @@ char* str_replace(const char* orig, char* rep, char* with) {
 }
 
 // ---------------------------------------------------------------------------
+void str_replace_inplace(char** orig, char* rep, char* with) {
+  char* tmp = str_replace(*orig, rep, with);
+  free(*orig);
+  *orig = tmp;
+}
+
+// ---------------------------------------------------------------------------
 void log(const char *format, ...) {
   static int count = 0;
   time_t timer;
@@ -126,6 +143,18 @@ void log(const char *format, ...) {
   #define LOG_TAG "[ FAINT ] "
 
   char* tag_format = str_replace(format, "\n", "\n" LOG_TAG);
+  str_replace_inplace(&tag_format, "{red}", colorlog ? ANSI_COLOR_RED : "");
+  str_replace_inplace(&tag_format, "{/red}", colorlog ? ANSI_COLOR_RESET : "");
+  str_replace_inplace(&tag_format, "{green}", colorlog ? ANSI_COLOR_GREEN : "");
+  str_replace_inplace(&tag_format, "{/green}", colorlog ? ANSI_COLOR_RESET : "");
+  str_replace_inplace(&tag_format, "{blue}", colorlog ? ANSI_COLOR_BLUE : "");
+  str_replace_inplace(&tag_format, "{/blue}", colorlog ? ANSI_COLOR_RESET : "");
+  str_replace_inplace(&tag_format, "{yellow}", colorlog ? ANSI_COLOR_YELLOW : "");
+  str_replace_inplace(&tag_format, "{/yellow}", colorlog ? ANSI_COLOR_RESET : "");
+  str_replace_inplace(&tag_format, "{magenta}", colorlog ? ANSI_COLOR_MAGENTA : "");
+  str_replace_inplace(&tag_format, "{/magenta}", colorlog ? ANSI_COLOR_RESET : "");
+  str_replace_inplace(&tag_format, "{cyan}", colorlog ? ANSI_COLOR_CYAN : "");
+  str_replace_inplace(&tag_format, "{/cyan}", colorlog ? ANSI_COLOR_RESET : "");
 
   // print to stdio
   va_list args;
@@ -145,6 +174,19 @@ void log(const char *format, ...) {
   sprintf(time_buffer, "\n[%s] ", buffer);
 
   char* file_format = str_replace(format, "\n", time_buffer);
+  str_replace_inplace(&file_format, "{red}", "");
+  str_replace_inplace(&file_format, "{/red}", "");
+  str_replace_inplace(&file_format, "{green}", "");
+  str_replace_inplace(&file_format, "{/green}", "");
+  str_replace_inplace(&file_format, "{blue}", "");
+  str_replace_inplace(&file_format, "{/blue}", "");
+  str_replace_inplace(&file_format, "{yellow}", "");
+  str_replace_inplace(&file_format, "{/yellow}", "");
+  str_replace_inplace(&file_format, "{magenta}", "");
+  str_replace_inplace(&file_format, "{/magenta}", "");
+  str_replace_inplace(&file_format, "{cyan}", "");
+  str_replace_inplace(&file_format, "{/cyan}", "");
+
   fprintf(f, "[%s] ", buffer);
   vfprintf(f, file_format, args);
   fprintf(f, "\n");
@@ -193,7 +235,7 @@ int get_file_and_line(char* binary, void* addr, char *file, int *line, char* fun
   FILE* f = popen(buf, "r");
 
   if(f == NULL) {
-    log("Could not resolve address %p, do you have addr2line installed?\n", addr);
+    log("{red}Could not resolve address %p, do you have addr2line installed?{/red}\n", addr);
     return 0;
   }
 
@@ -258,6 +300,7 @@ void usage(char* binary) {
   printf("--disable [module]\n\t\t Disables the module\n\n");
   printf("--no-memory\n\t\t Disable all memory allocation modules\n\n");
   printf("--file-io\n\t\t Enable all File I/O modules\n\n");
+  printf("--colorlog\n\t\t Enable log output with colors\n\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -266,11 +309,11 @@ void extract_shared_library() {
 
   FILE* so = fopen("./fault_inject.so", "wb");
   if(!so) {
-    log("Could not extract 'fault_inject.so'. Aborting.");
+    log("{red}Could not extract 'fault_inject.so'. Aborting.{/red}");
     exit(1);
   }
   if(fwrite(fault_lib, fault_lib_size, 1, so) != 1) {
-    log("Could not write to file 'fault_inject.so'. Aborting.");
+    log("{red}Could not write to file 'fault_inject.so'. Aborting.{/red}");
     fclose(so);
     exit(1);
   }
@@ -320,8 +363,10 @@ int parse_commandline(int argc, char* argv[]) {
         enable_module("fread");
         enable_module("fwrite");
         enable_module("fgets");
+      } else if(!strcmp(cmd, "colorlog")) {
+        colorlog = 1;
       } else {
-        log("Unknown command: %s", cmd);
+        log("{red}Unknown command: %s{/red}", cmd);
         exit(1);
       }
     } else {
@@ -332,7 +377,7 @@ int parse_commandline(int argc, char* argv[]) {
   write_settings();
   for(i = 0; i < MODULE_COUNT; i++) {
     if(settings.modules & (1 << i)) {
-      log("Activate module '%s'", modules[i]);
+      log("Activate module '{yellow}%s{/yellow}'", modules[i]);
     }
   }
   log("\n");
@@ -348,7 +393,7 @@ void check_debug_symbols(char* binary) {
     char debug_lines[32];
     fgets(debug_lines, 32, dbg);
     if(atoi(debug_lines) == 0) {
-      log("Could not find debugging info! Did you compile with -g?\n");
+      log("{red}Could not find debugging info! Did you compile with -g?{/red}\n");
     }
     pclose(dbg);
   }
@@ -357,7 +402,7 @@ void check_debug_symbols(char* binary) {
 // ---------------------------------------------------------------------------
 void disable_aslr() {
   if(personality(ADDR_NO_RANDOMIZE) == -1) {
-    log("Could not turn off ASLR: %s", strerror(errno));
+    log("{red}Could not turn off ASLR: %s{/red}", strerror(errno));
   } else {
     log("ASLR turned off successfully");
   }
@@ -369,12 +414,12 @@ void print_fault_position(char* binary, void* fault, int type, int count) {
   int m_line;
   if(get_file_and_line(binary, fault, m_file, &m_line, m_function)) {
     if(count != -1) {
-      log(" >  [%s] %s in %s line %d: %d calls", modules[type], m_function, m_file, m_line, count);
+      log(" >  [{yellow}%s{/yellow}] {cyan}%s{/cyan} in %s line {cyan}%d{/cyan}: %d calls", modules[type], m_function, m_file, m_line, count);
     } else {
-      log(" >  [%s] %s in %s line %d", modules[type], m_function, m_file, m_line);
+      log(" >  [{yellow}%s{/yellow}] {cyan}%s{/cyan} in %s line {cyan}%d{/cyan}", modules[type], m_function, m_file, m_line);
     }
   } else {
-    log(" > N/A (maybe you forgot to compile with -g?)");
+    log(" > N/A ({red}maybe you forgot to compile with -g?{/red})");
   }
 }
 
@@ -383,11 +428,11 @@ void crash_details(char* binary, void* crash, void* fault, cmap* types) {
   char crash_file[256], fault_file[256], crash_fnc[256], fault_fnc[256];
   int crash_line, fault_line;
 
-  log("Crashed at %p, caused by %p [%s]", crash, fault, modules[(size_t) map(types)->get(fault)]);
+  log("{red}Crashed{/red} at %p, caused by %p [%s]", crash, fault, modules[(size_t) map(types)->get(fault)]);
   if(get_file_and_line(binary, crash, crash_file, &crash_line, crash_fnc)
       && get_file_and_line(binary, fault, fault_file, &fault_line, fault_fnc)) {
-    log("  > crash: %s (%s) line %d", crash_fnc, crash_file, crash_line);
-    log("  > %s: %s (%s) line %d", modules[(size_t) map(types)->get(fault)], fault_fnc, fault_file, fault_line);
+    log("  > {red}crash{/red}: {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}", crash_fnc, crash_file, crash_line);
+    log("  > {yellow}%s{/yellow}: {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}", modules[(size_t) map(types)->get(fault)], fault_fnc, fault_file, fault_line);
   } else {
     log("No crash details available (maybe you forgot to compile with -g?)");
   }
@@ -421,7 +466,7 @@ void summary(char* binary, int crash_count, int injections, cmap* crashes, cmap*
     }
     map_iterator(it)->destroy();
   } else {
-    log("Everything ok, no crashes detected!");
+    log("{green}Everything ok, no crashes detected!{/green}");
   }
 }
 
@@ -430,7 +475,7 @@ int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls,
 
   FILE* f = fopen("profile", "rb");
   if(!f) {
-    log("No trace generated, aborting now\n");
+    log("{red}No trace generated, aborting now{/red}\n");
     exit(1);
   }
   fseek(f, 0, SEEK_END);
@@ -461,7 +506,7 @@ int wait_for_child(pid_t pid) {
 
   if(WIFEXITED(status)) {
     int ret = WEXITSTATUS(status);
-    log("Exited, status: %d %s%s%s\n", ret, ret >= 128 ? "(" : "", ret >= 128 ? strsignal(ret - 128) : "",
+    log("Exited, status: %d %s{red}%s{/red}%s\n", ret, ret >= 128 ? "(" : "", ret >= 128 ? strsignal(ret - 128) : "",
         ret >= 128 ? ")" : "");
   } else if(WIFSIGNALED(status)) {
     log("Killed by signal %d (%s)\n", WTERMSIG(status), strsignal(WTERMSIG(status)));
@@ -517,10 +562,10 @@ int main(int argc, char* argv[]) {
   disable_aslr();
 
   // fork first to profile
-  log("Profiling start");
+  log("{green}Profiling start{/green}");
   FILE* f = fopen("profile", "wb");
   if(!f) {
-    log("Need write access to file 'profile'!");
+    log("{red}Need write access to file 'profile'!{/red}");
     exit(1);
   }
   fclose(f);
@@ -535,11 +580,11 @@ int main(int argc, char* argv[]) {
     int status;
     waitpid(pid, &status, 0);
     if(!WIFEXITED(status)) {
-      log("There was an error while profiling, aborting now");
+      log("{red}There was an error while profiling, aborting now{/red}");
       exit(1);
     }
 
-    log("Profiling done");
+    log("{green}Profiling done{/green}");
     // profiling done, fork to inject
     size_t calls = 0;
 
@@ -571,9 +616,9 @@ int main(int argc, char* argv[]) {
           if(killed)
             crash_count++;
         }
-        log("Injection #%d done", (i + 1));
+        log("{green}Injection #%d done{/green}", (i + 1));
       } else {
-        log("\n\nInject fault #%d", (i + 1));
+        log("\n\n{green}Inject fault #%d{/green}", (i + 1));
         log("Fault position:");
         print_fault_position(args[0], (void*) (fault_addr[i]), fault_type[i], -1);
         log("");
@@ -594,7 +639,7 @@ int main(int argc, char* argv[]) {
     // -> profile
     set_mode(PROFILE);
     execve(args[0], args, envs);
-    log("Could not execute %s", args[0]);
+    log("{red}Could not execute %s{/red}", args[0]);
     exit(0);
   }
 
