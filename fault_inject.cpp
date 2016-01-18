@@ -22,6 +22,7 @@ static h_realloc real_realloc = NULL;
 static h_calloc real_calloc = NULL;
 static h_fopen real_fopen = NULL;
 static h_getline real_getline = NULL;
+static h_fgets real_fgets = NULL;
 
 static unsigned int no_intercept = 0;
 
@@ -71,9 +72,10 @@ static void _init(void) {
   real_calloc = (h_calloc) dlsym(RTLD_NEXT, "calloc");
   real_fopen = (h_fopen) dlsym(RTLD_NEXT, "fopen");
   real_getline = (h_getline) dlsym(RTLD_NEXT, "getline"); // don't check for NULL, might not be available
+  real_fgets = (h_fgets) dlsym(RTLD_NEXT, "fgets");
 
   if(real_malloc == NULL || real_abort == NULL || real_exit == NULL || real_exit1 == NULL || real_realloc == NULL
-      || real_calloc == NULL || real_fopen == NULL) {
+      || real_calloc == NULL || real_fopen == NULL || real_fgets == NULL) {
     fprintf(stderr, "Error in `dlsym`: %s\n", dlerror());
     unblock();
     return;
@@ -339,6 +341,16 @@ ssize_t getline(char** lineptr, size_t* len, FILE* stream) {
   } else {
     NoIntercept n;
     return real_getline(lineptr, len, stream);
+  }
+}
+
+//-----------------------------------------------------------------------------
+char* fgets(char* buffer, int size, FILE* f) {
+  if(handle_inject<h_fgets>("fgets", &real_fgets)) {
+    return NULL;
+  } else {
+    NoIntercept n;
+    return real_fgets(buffer, size, f);
   }
 }
 

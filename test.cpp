@@ -5,7 +5,7 @@ int *helper(int size) {
   int* v = NULL;
   try {
     v = new int[size];
-  } catch(std::bad_alloc ex) {
+  } catch(std::bad_alloc& ex) {
     std::cout << "OOM!" << std::endl;
   }
   if(!v)

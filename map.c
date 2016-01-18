@@ -5,7 +5,6 @@
 void* _obj_addr[MAX_MAP_NESTING];
 int _obj_addr_pos = 0;
 
-extern void* _malloc(size_t);
 allocator map_allocate = malloc;
 
 #define this ((cmap*)_obj_addr[_obj_addr_pos - 1])

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int *helper(int size) {
   printf("Helper\n");
@@ -28,6 +29,9 @@ int* do_mem(int size) {
 }
 
 int main() {
+  char* foo = strdup("hallo");
+  printf("%s\n", foo);
+
   int* a = do_mem(10);
   a[0] = 1;
   free(a);
@@ -41,13 +45,12 @@ int main() {
   int ret = getline(&line, &len, f);
   printf("read ok: %d, line: %p\n", ret, line);
   printf("%s\n", line);
-
-  /*
-  char buffer[256];
-  fgets(buffer, 256, f);
-  printf("%s\n", buffer);
   free(line);
-  */
+
+  char buffer[256];
+  printf("fgets: %s\n", fgets(buffer, 256, f));
+  printf("%s\n", buffer);
+
   fclose(f);
 
   return 0;
