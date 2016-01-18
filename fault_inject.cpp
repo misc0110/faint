@@ -7,11 +7,12 @@
  **/
 
 #include "fault_inject.h"
+#include "settings.h"
+#include "map.h"
 
 #include <iostream>
 #include <string.h>
-#include "settings.h"
-#include "map.h"
+#include <stdarg.h>
 
 static h_malloc real_malloc = NULL;
 static h_abort real_abort = NULL;
@@ -214,153 +215,78 @@ void save_trace(const char* type) {
   fclose(f);
   is_backtrace = 0;
 }
-//-----------------------------------------------------------------------------
-void *malloc(size_t size) {
-  if(real_malloc == NULL)
-    _init();
 
-  if(!module_active("malloc")) {
-    return real_malloc(size);
-  }
-
-  if(is_backtrace) {
-    return real_malloc(size);
-  }
-
-  void* addr = get_return_address(0); // __builtin_return_address(0);
-  current_malloc = addr;
-
-  if(settings.mode == PROFILE) {
-    save_trace("malloc");
-    return real_malloc(size);
-  } else if(settings.mode == INJECT) {
-    if(!map(mallocs)->has(addr)) {
-      printf("strange, %p was not profiled\n", addr);
-      return real_malloc(size);
-    } else {
-      if(map(mallocs)->get(addr)) {
-        // let it fail
-        return NULL;
-      } else {
-        // real malloc
-        return real_malloc(size);
-      }
-    }
-  }
-  // don't know what to do
-  return NULL;
-}
 
 //-----------------------------------------------------------------------------
-void *realloc(void* mem, size_t size) {
-  if(real_realloc == NULL)
+template <typename T>
+int handle_inject(const char* name, T* function) {
+  if(*function == NULL) {
     _init();
-
-  if(!module_active("realloc")) {
-    return real_realloc(mem, size);
   }
 
-  if(is_backtrace) {
-    return real_realloc(mem, size);
-  }
-
-  void* addr = get_return_address(0); //  __builtin_return_address(0);
-  current_malloc = addr;
-
-  if(settings.mode == PROFILE) {
-    save_trace("realloc");
-    return real_realloc(mem, size);
-  } else if(settings.mode == INJECT) {
-    if(!map(mallocs)->has(addr)) {
-      printf("strange, %p was not profiled\n", addr);
-      return real_realloc(mem, size);
-    } else {
-      if(map(mallocs)->get(addr)) {
-        // let it fail
-        return NULL;
-      } else {
-        // real realloc
-        return real_realloc(mem, size);
-      }
-    }
-  }
-  // don't know what to do
-  return NULL;
-}
-
-//-----------------------------------------------------------------------------
-void *calloc(size_t elem, size_t size) {
-  if(real_calloc == NULL)
-    _init();
-
-  if(!module_active("calloc")) {
-    return real_calloc(elem, size);
-  }
-
-  if(is_backtrace) {
-    return real_calloc(elem, size);
-  }
-
-  void* addr = get_return_address(0); // __builtin_return_address(0);
-  current_malloc = addr;
-
-  if(settings.mode == PROFILE) {
-    save_trace("calloc");
-    return real_calloc(elem, size);
-  } else if(settings.mode == INJECT) {
-    if(!map(mallocs)->has(addr)) {
-      printf("strange, %p was not profiled\n", addr);
-      return real_calloc(elem, size);
-    } else {
-      if(map(mallocs)->get(addr)) {
-        // let it fail
-        return NULL;
-      } else {
-        // real calloc
-        return real_calloc(elem, size);
-      }
-    }
-  }
-  // don't know what to do
-  return NULL;
-}
-
-//-----------------------------------------------------------------------------
-void* operator new(size_t size) {
-  if(real_malloc == NULL)
-    _init();
-
-  if(!module_active("new")) {
-    return real_malloc(size);
-  }
-
-  if(is_backtrace) {
-    return real_malloc(size);
+  if(!module_active(name) || is_backtrace) {
+    return 0;
   }
 
   void* addr = get_return_address(0);
   current_malloc = addr;
 
   if(settings.mode == PROFILE) {
-    save_trace("new");
-    return real_malloc(size);
+    save_trace(name);
+    return 0;
   } else if(settings.mode == INJECT) {
     if(!map(mallocs)->has(addr)) {
       printf("strange, %p was not profiled\n", addr);
-      return real_malloc(size);
+      return 0;
     } else {
       if(map(mallocs)->get(addr)) {
         // let it fail
-        throw std::bad_alloc();
-        return NULL;
+        return 1;
       } else {
-        // real malloc
-        return real_malloc(size);
+        // real function
+        return 0;
       }
     }
   }
   // don't know what to do
-  return NULL;
+  return 0;
+}
+
+//-----------------------------------------------------------------------------
+void *malloc(size_t size) {
+  if(handle_inject<h_malloc>("malloc", &real_malloc)) {
+    return NULL;
+  } else {
+    return real_malloc(size);
+  }
+}
+
+//-----------------------------------------------------------------------------
+void *realloc(void* mem, size_t size) {
+  if(handle_inject<h_realloc>("realloc", &real_realloc)) {
+    return NULL;
+  } else {
+    return real_realloc(mem, size);
+  }
+}
+
+//-----------------------------------------------------------------------------
+void *calloc(size_t elem, size_t size) {
+  if(handle_inject<h_calloc>("calloc", &real_calloc)) {
+    return NULL;
+  } else {
+    return real_calloc(elem, size);
+  }
+}
+
+//-----------------------------------------------------------------------------
+void* operator new(size_t size) {
+  if(handle_inject<h_malloc>("new", &real_malloc)) {
+    throw std::bad_alloc();
+    return NULL;
+  } else {
+    return real_malloc(size);
+  }
 }
 
 //-----------------------------------------------------------------------------

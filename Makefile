@@ -8,7 +8,7 @@ faint.o: faint.c
 	gcc -c faint.c -Wall -g -fno-builtin-log -o faint.o
 
 fault_inject: fault_inject.cpp map.o
-	g++ -Wall -fPIC -DPIC -c -g -fno-stack-protector -funwind-tables fault_inject.cpp
+	g++ -Wall -fPIC -DPIC -c -g -fno-stack-protector -funwind-tables -fpermissive fault_inject.cpp
 	g++ -shared -g -o fault_inject.so map.o fault_inject.o -ldl
 
 map.o: map.c

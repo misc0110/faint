@@ -6,10 +6,12 @@ enum Mode {
 };
 
 const char* modules[] = {
+  "(unknown)",
   "malloc",
   "realloc",
   "calloc",
-  "new"
+  "new",
+  "fopen"
 };
 #define MODULE_COUNT (sizeof(modules) / sizeof(modules[0]))
 

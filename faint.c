@@ -322,7 +322,7 @@ void crash_details(char* binary, void* crash, void* fault, cmap* types) {
   if(get_file_and_line(binary, crash, crash_file, &crash_line, crash_fnc)
       && get_file_and_line(binary, fault, fault_file, &fault_line, fault_fnc)) {
     log("  > crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
-    log("  > %s: %s (%s) line %d\n", modules[(size_t) map(types)->get(crash)], fault_fnc, fault_file, fault_line);
+    log("  > %s: %s (%s) line %d\n", modules[(size_t) map(types)->get(fault)], fault_fnc, fault_file, fault_line);
   } else {
     log("No crash details available (maybe you forgot to compile with -g?)\n");
   }
