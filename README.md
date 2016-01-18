@@ -26,6 +26,12 @@ After injecting all faults, the program presents a summary of all crashes and th
 
 To ensure that the addresses stay the same over multiple runs, ASLR is deactivated by the program. 
 
+# Building
+
+Needs `gcc-4.9-multilib` and `g++-4.9-multilib` for cross-compiling the 32bit library.
+
+To build, simply `make && sudo make install`. The binary is called `faint`. 
+
 # Example
 
 There are two samples included, one written in C and one in C++. Execute `make run` or `make runcpp` respectively to examine those samples using faint. The output of `make run` should look similar to the following log:
