@@ -140,7 +140,7 @@ void log(const char *format, ...) {
   struct tm* tm_info;
 
   // replace newlines with tag
-  #define LOG_TAG "[ FAINT ] "
+#define LOG_TAG "[ FAINT ] "
 
   char* tag_format = str_replace(format, "\n", "\n" LOG_TAG);
   str_replace_inplace(&tag_format, "{red}", colorlog ? ANSI_COLOR_RED : "");
@@ -308,7 +308,14 @@ void usage(char* binary) {
 void extract_shared_library() {
   size_t fault_lib_size = (size_t) ((char*) fault_lib_end - (char*) fault_lib);
 
-  FILE* so = fopen("./fault_inject.so", "wb");
+  FILE* so = fopen("./fault_inject.so", "rb");
+  if(so) {
+    // file already extracted, done
+    fclose(so);
+    return;
+  }
+
+  so = fopen("./fault_inject.so", "wb");
   if(!so) {
     log("{red}Could not extract 'fault_inject.so'. Aborting.{/red}");
     exit(1);
@@ -415,9 +422,11 @@ void print_fault_position(char* binary, void* fault, int type, int count) {
   int m_line;
   if(get_file_and_line(binary, fault, m_file, &m_line, m_function)) {
     if(count != -1) {
-      log(" >  [{yellow}%s{/yellow}] {cyan}%s{/cyan} in %s line {cyan}%d{/cyan}: %d calls", modules[type], m_function, m_file, m_line, count);
+      log(" >  [{yellow}%s{/yellow}] {cyan}%s{/cyan} in %s line {cyan}%d{/cyan}: %d calls", modules[type], m_function,
+          m_file, m_line, count);
     } else {
-      log(" >  [{yellow}%s{/yellow}] {cyan}%s{/cyan} in %s line {cyan}%d{/cyan}", modules[type], m_function, m_file, m_line);
+      log(" >  [{yellow}%s{/yellow}] {cyan}%s{/cyan} in %s line {cyan}%d{/cyan}", modules[type], m_function, m_file,
+          m_line);
     }
   } else {
     log(" > N/A ({red}maybe you forgot to compile with -g?{/red})");
@@ -433,7 +442,8 @@ void crash_details(char* binary, void* crash, void* fault, cmap* types) {
   if(get_file_and_line(binary, crash, crash_file, &crash_line, crash_fnc)
       && get_file_and_line(binary, fault, fault_file, &fault_line, fault_fnc)) {
     log("  > {red}crash{/red}: {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}", crash_fnc, crash_file, crash_line);
-    log("  > {yellow}%s{/yellow}: {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}", modules[(size_t) map(types)->get(fault)], fault_fnc, fault_file, fault_line);
+    log("  > {yellow}%s{/yellow}: {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}", modules[(size_t) map(types)->get(fault)],
+        fault_fnc, fault_file, fault_line);
   } else {
     log("No crash details available (maybe you forgot to compile with -g?)");
   }
@@ -501,19 +511,27 @@ int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls,
   return injections;
 }
 
+// ---------------------------------------------------------------------------
+void show_return_details(int status) {
+  if(WIFEXITED(status)) {
+    int ret = WEXITSTATUS(status);
+    log("Exited, status: %d %s{red}%s{/red}%s", ret, ret >= 128 ? "(" : "", ret >= 128 ? strsignal(ret - 128) : "",
+        ret >= 128 ? ")" : "");
+  } else if(WIFSIGNALED(status)) {
+    log("Killed by signal %d (%s)", WTERMSIG(status), strsignal(WTERMSIG(status)));
+  } else if(WIFSTOPPED(status)) {
+    log("Stopped by signal %d (%s)", WSTOPSIG(status), strsignal(WTERMSIG(status)));
+  }
+}
+
+// ---------------------------------------------------------------------------
 int wait_for_child(pid_t pid) {
   int status, killed = 0;
   waitpid(pid, &status, 0);
 
-  if(WIFEXITED(status)) {
-    int ret = WEXITSTATUS(status);
-    log("Exited, status: %d %s{red}%s{/red}%s\n", ret, ret >= 128 ? "(" : "", ret >= 128 ? strsignal(ret - 128) : "",
-        ret >= 128 ? ")" : "");
-  } else if(WIFSIGNALED(status)) {
-    log("Killed by signal %d (%s)\n", WTERMSIG(status), strsignal(WTERMSIG(status)));
+  show_return_details(status);
+  if(WIFSIGNALED(status)) {
     killed = 1;
-  } else if(WIFSTOPPED(status)) {
-    log("Stopped by signal %d (%s)\n", WSTOPSIG(status), strsignal(WTERMSIG(status)));
   }
   return killed;
 }
@@ -582,6 +600,7 @@ int main(int argc, char* argv[]) {
     waitpid(pid, &status, 0);
     if(!WIFEXITED(status)) {
       log("{red}There was an error while profiling, aborting now{/red}");
+      show_return_details(status);
       exit(1);
     }
 
