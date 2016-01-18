@@ -1,15 +1,15 @@
 all: faint test testcpp
 
-faint: faint.o map.c malloc_replace 
+faint: faint.o map.c fault_inject 
 	gcc -Wall -g -c map.c -o map_c.o
-	gcc faint.o map_c.o -Wall -g -Wl,--format=binary -Wl,malloc_replace.so -Wl,--format=default -o faint
+	gcc faint.o map_c.o -Wall -g -Wl,--format=binary -Wl,fault_inject.so -Wl,--format=default -o faint
 
 faint.o: faint.c
 	gcc -c faint.c -Wall -g -fno-builtin-log -o faint.o
 
-malloc_replace: malloc_replace.cpp map.o
-	g++ -Wall -fPIC -DPIC -c -g -fno-stack-protector -funwind-tables malloc_replace.cpp
-	g++ -shared -g -o malloc_replace.so map.o malloc_replace.o -ldl
+fault_inject: fault_inject.cpp map.o
+	g++ -Wall -fPIC -DPIC -c -g -fno-stack-protector -funwind-tables fault_inject.cpp
+	g++ -shared -g -o fault_inject.so map.o fault_inject.o -ldl
 
 map.o: map.c
 	g++ map.c -fPIC -DPIC -Wall -c -g -o map.o

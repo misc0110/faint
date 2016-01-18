@@ -1,13 +1,11 @@
 /*
- * Shared library to let new fail after a given number of successful new 
- * calls. Used to test out-of-memory handling of programs.
  * 
  * 01/2016 by Michael Schwarz 
  *
  **/
 
 #ifndef _MALLOC_REPLACE_H_
-#define _MALLOC_REPLACE_H_
+#define _FAULT_INJECT_H_
 
 #include <stdio.h>
 #include <execinfo.h>

@@ -18,6 +18,6 @@ typedef struct {
     int limit;
     char filename[256];
     unsigned int modules;
-}__attribute__((packed)) MallocSettings;
+}__attribute__((packed)) FaultSettings;
 
 #endif

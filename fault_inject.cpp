@@ -6,9 +6,10 @@
  *
  **/
 
+#include "fault_inject.h"
+
 #include <iostream>
 #include <string.h>
-#include "malloc_replace.h"
 #include "settings.h"
 #include "map.h"
 
@@ -23,7 +24,7 @@ static unsigned int is_backtrace = 0;
 
 void segfault_handler(int sig);
 
-static MallocSettings settings;
+static FaultSettings settings;
 map_declare(mallocs);
 map_declare(types);
 
@@ -49,7 +50,7 @@ static void _init(void) {
   // read settings from file
   FILE *f = fopen("settings", "rb");
   if(f) {
-    fread(&settings, sizeof(MallocSettings), 1, f);
+    fread(&settings, sizeof(FaultSettings), 1, f);
     fclose(f);
   }
   //printf("-- Mode: %d\n", settings.mode);

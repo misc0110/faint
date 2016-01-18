@@ -1,5 +1,5 @@
 /*
- * Out-of-memory testing program. Needs malloc_replace.so to be present in the 
+ * Automatic fault tester. Needs fault_inject.so to be present in the
  * working directory.
  * 
  * 01/2016 by Michael Schwarz 
@@ -27,16 +27,16 @@
 #define personality(pers) ((long)syscall(SYS_personality, pers))
 #endif
 
-MallocSettings settings;
+FaultSettings settings;
 
-extern uint8_t malloc_lib[] asm("_binary_malloc_replace_so_start");
-extern uint8_t malloc_lib_end[] asm("_binary_malloc_replace_so_end");
+extern uint8_t fault_lib[] asm("_binary_fault_inject_so_start");
+extern uint8_t fault_lib_end[] asm("_binary_fault_inject_so_end");
 
 // ---------------------------------------------------------------------------
 void write_settings() {
   FILE* f = fopen("settings", "wb");
   if(f) {
-    fwrite(&settings, sizeof(MallocSettings), 1, f);
+    fwrite(&settings, sizeof(FaultSettings), 1, f);
     fclose(f);
   }
 }
@@ -123,11 +123,11 @@ void clear_crash_report() {
 }
 
 // ---------------------------------------------------------------------------
-int get_crash_address(void** crash, void** malloc_addr) {
+int get_crash_address(void** crash, void** fault_addr) {
   FILE* f = fopen("crash", "rb");
   if(!f)
     return 0;
-  int s1 = fread(malloc_addr, sizeof(void*), 1, f);
+  int s1 = fread(fault_addr, sizeof(void*), 1, f);
   int s = fread(crash, sizeof(void*), 1, f);
   fclose(f);
   if(s == 0 || s1 == 0)
@@ -192,7 +192,7 @@ void cleanup() {
   remove("settings");
   remove("profile");
   remove("crash");
-  remove("malloc_replace.so");
+  remove("fault_inject.so");
   log("\n");
   log("\n");
   log("finished successfully!\n");
@@ -211,15 +211,15 @@ void usage(char* binary) {
 
 // ---------------------------------------------------------------------------
 void extract_shared_library() {
-  size_t malloc_lib_size = (size_t) ((char*) malloc_lib_end - (char*) malloc_lib);
+  size_t fault_lib_size = (size_t) ((char*) fault_lib_end - (char*) fault_lib);
 
-  FILE* so = fopen("./malloc_replace.so", "wb");
+  FILE* so = fopen("./fault_inject.so", "wb");
   if(!so) {
-    log("Could not extract 'malloc_replace.so'. Aborting.\n");
+    log("Could not extract 'fault_inject.so'. Aborting.\n");
     exit(1);
   }
-  if(fwrite(malloc_lib, malloc_lib_size, 1, so) != 1) {
-    log("Could not write to file 'malloc_replace.so'. Aborting.\n");
+  if(fwrite(fault_lib, fault_lib_size, 1, so) != 1) {
+    log("Could not write to file 'fault_inject.so'. Aborting.\n");
     fclose(so);
     exit(1);
   }
@@ -421,7 +421,7 @@ int main(int argc, char* argv[]) {
   log("Starting, Version 1.0\n");
   log("\n");
 
-  // extract malloc replace library
+  // extract fault inject library
   extract_shared_library();
 
   // modules enabled by default
@@ -430,8 +430,8 @@ int main(int argc, char* argv[]) {
   // parse commandline
   int binary_pos = parse_commandline(argc, argv);
 
-  // preload malloc replacement
-  char* const envs[] = { (char*) "LD_PRELOAD=./malloc_replace.so", NULL };
+  // preload fault inject library
+  char* const envs[] = { (char*) "LD_PRELOAD=./fault_inject.so", NULL };
   char* args[argc];
 
   // inherit all arguments
@@ -492,7 +492,7 @@ int main(int argc, char* argv[]) {
     }
     log("\n");
 
-    // let one specific malloc fail per loop iteration
+    // let one specific function fail per loop iteration
     log("Injecting %d faults, one for every injection position\n", injections);
     log("\n");
 
@@ -501,11 +501,11 @@ int main(int argc, char* argv[]) {
       if(pid) {
         int killed = wait_for_child(pid);
 
-        void *crash, *m;
-        int has_addr = get_crash_address(&crash, &m);
+        void *crash, *fault;
+        int has_addr = get_crash_address(&crash, &fault);
         if(has_addr) {
-          crash_details(args[0], crash, m, types);
-          map(crashes)->set(crash, m);
+          crash_details(args[0], crash, fault, types);
+          map(crashes)->set(crash, fault);
           crash_count++;
         } else {
           if(killed)
