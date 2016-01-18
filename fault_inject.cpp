@@ -21,12 +21,12 @@ static h_exit real_exit1 = NULL;
 static h_realloc real_realloc = NULL;
 static h_calloc real_calloc = NULL;
 
-static unsigned int is_backtrace = 0;
+static unsigned int no_intercept = 0;
 
 void segfault_handler(int sig);
 
 static FaultSettings settings;
-map_declare(mallocs);
+map_declare(faults);
 map_declare(types);
 
 void* current_malloc = NULL;
@@ -47,7 +47,7 @@ static void _init(void) {
     return;
   }
 
-  is_backtrace = 1;
+  no_intercept = 1;
   // read settings from file
   FILE *f = fopen("settings", "rb");
   if(f) {
@@ -56,8 +56,8 @@ static void _init(void) {
   }
   //printf("-- Mode: %d\n", settings.mode);
   if(settings.mode == INJECT) {
-    if(!mallocs)
-      map_initialize(mallocs, MAP_GENERAL);
+    if(!faults)
+      map_initialize(faults, MAP_GENERAL);
     if(!types)
       map_initialize(types, MAP_GENERAL);
 
@@ -78,7 +78,7 @@ static void _init(void) {
           cnt = (void*) 1;
         else
           cnt = (void*) 0;
-        map(mallocs)->set(addr, cnt);
+        map(faults)->set(addr, cnt);
         map(types)->set(addr, type);
         entry++;
       }
@@ -96,7 +96,7 @@ static void _init(void) {
   sigaction(SIGSEGV, &sig_handler, NULL);
   sigaction(SIGABRT, &sig_handler, NULL);
 
-  is_backtrace = 0;
+  no_intercept = 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -145,8 +145,8 @@ void* get_return_address(int index) {
   void *buffer[100];
   char **strings;
   void* addr = NULL;
-  int old_is_backtrace = is_backtrace;
-  is_backtrace = 1;
+  int old_is_backtrace = no_intercept;
+  no_intercept = 1;
 
   nptrs = backtrace(buffer, 100);
   strings = backtrace_symbols(buffer, nptrs);
@@ -166,14 +166,14 @@ void* get_return_address(int index) {
     }
     free(strings);
   }
-  is_backtrace = old_is_backtrace;
+  no_intercept = old_is_backtrace;
   return addr;
 }
 
 //-----------------------------------------------------------------------------
 void save_trace(const char* type) {
   // get callee address
-  is_backtrace = 1;
+  no_intercept = 1;
   void* p = get_return_address(0); //__builtin_return_address(1);
 
   //printf("0x%x\n", p);
@@ -183,25 +183,25 @@ void save_trace(const char* type) {
     //printf("%s\n", info.dli_fname);
     if(info.dli_fname && strcmp(info.dli_fname, settings.filename) != 0) {
       // not our file
-      is_backtrace = 0;
+      no_intercept = 0;
       return;
     }
   }
 
-  if(!mallocs)
-    map_initialize(mallocs, MAP_GENERAL);
+  if(!faults)
+    map_initialize(faults, MAP_GENERAL);
   if(!types)
     map_initialize(types, MAP_GENERAL);
 
-  if(map(mallocs)->has(p)) {
-    map(mallocs)->set(p, (void*) ((size_t) (map(mallocs)->get(p)) + 1));
+  if(map(faults)->has(p)) {
+    map(faults)->set(p, (void*) ((size_t) (map(faults)->get(p)) + 1));
   } else {
-    map(mallocs)->set(p, (void*) 1);
+    map(faults)->set(p, (void*) 1);
   }
   map(types)->set(p, (void*) get_module_id(type));
 
   FILE* f = fopen("profile", "wb");
-  cmap_iterator* it = map(mallocs)->iterator();
+  cmap_iterator* it = map(faults)->iterator();
   while(!map_iterator(it)->end()) {
     void* k = map_iterator(it)->key();
     void* v = map_iterator(it)->value();
@@ -213,7 +213,7 @@ void save_trace(const char* type) {
   }
   map_iterator(it)->destroy();
   fclose(f);
-  is_backtrace = 0;
+  no_intercept = 0;
 }
 
 
@@ -224,7 +224,7 @@ int handle_inject(const char* name, T* function) {
     _init();
   }
 
-  if(!module_active(name) || is_backtrace) {
+  if(!module_active(name) || no_intercept) {
     return 0;
   }
 
@@ -235,11 +235,11 @@ int handle_inject(const char* name, T* function) {
     save_trace(name);
     return 0;
   } else if(settings.mode == INJECT) {
-    if(!map(mallocs)->has(addr)) {
+    if(!map(faults)->has(addr)) {
       printf("strange, %p was not profiled\n", addr);
       return 0;
     } else {
-      if(map(mallocs)->get(addr)) {
+      if(map(faults)->get(addr)) {
         // let it fail
         return 1;
       } else {
@@ -308,7 +308,7 @@ void _exit(int val) {
 
 //-----------------------------------------------------------------------------
 void segfault_handler(int sig) {
-  is_backtrace = 1;
+  no_intercept = 1;
   void* crash_addr = NULL;
 
   // find crash address in backtrace
@@ -319,7 +319,7 @@ void segfault_handler(int sig) {
   fwrite(&current_malloc, sizeof(void*), 1, f);
   fwrite(&crash_addr, sizeof(void*), 1, f);
   fclose(f);
-  is_backtrace = 0;
+  no_intercept = 0;
   real_exit1(sig + 128);
 }
 
