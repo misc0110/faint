@@ -35,10 +35,15 @@
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
+#define ARCH_32   0
+#define ARCH_64   1
+
 FaultSettings settings;
 
 extern uint8_t fault_lib[] asm("_binary_fault_inject_so_start");
 extern uint8_t fault_lib_end[] asm("_binary_fault_inject_so_end");
+extern uint8_t fault_lib32[] asm("_binary_fault_inject32_so_start");
+extern uint8_t fault_lib32_end[] asm("_binary_fault_inject32_so_end");
 
 int colorlog = 0;
 
@@ -304,15 +309,27 @@ void usage(char* binary) {
 }
 
 // ---------------------------------------------------------------------------
-void extract_shared_library() {
-  size_t fault_lib_size = (size_t) ((char*) fault_lib_end - (char*) fault_lib);
+void extract_shared_library(int arch) {
+  size_t fault_lib_size;
+  if(arch == ARCH_32) {
+    fault_lib_size = (size_t) ((char*) fault_lib32_end - (char*) fault_lib32);
+  } else {
+    fault_lib_size = (size_t) ((char*) fault_lib_end - (char*) fault_lib);
+  }
 
   FILE* so = fopen("./fault_inject.so", "wb");
   if(!so) {
     log("{red}Could not extract 'fault_inject.so'. Aborting.{/red}");
     exit(1);
   }
-  if(fwrite(fault_lib, fault_lib_size, 1, so) != 1) {
+
+  int write_ret;
+  if(arch == ARCH_32) {
+    write_ret = fwrite(fault_lib32, fault_lib_size, 1, so);
+  } else {
+    write_ret = fwrite(fault_lib, fault_lib_size, 1, so);
+  }
+  if(write_ret != 1) {
     log("{red}Could not write to file 'fault_inject.so'. Aborting.{/red}");
     fclose(so);
     exit(1);
@@ -397,6 +414,22 @@ void check_debug_symbols(char* binary) {
     }
     pclose(dbg);
   }
+}
+
+// ---------------------------------------------------------------------------
+int get_architecture(char* binary) {
+  int arch = ARCH_64;
+  char obj_cmdline[256];
+  sprintf(obj_cmdline, "objdump -f \"%s\" | grep elf", binary);
+  FILE* dbg = popen(obj_cmdline, "r");
+  if(dbg) {
+    char debug_lines[256];
+    fgets(debug_lines, 256, dbg);
+    if(strstr(debug_lines, "elf32") != NULL) arch = ARCH_32;
+    if(strstr(debug_lines, "elf64") != NULL) arch = ARCH_64;
+    pclose(dbg);
+  }
+  return arch;
 }
 
 // ---------------------------------------------------------------------------
@@ -527,9 +560,6 @@ int main(int argc, char* argv[]) {
 
   log("Starting, Version 1.0\n");
 
-  // extract fault inject library
-  extract_shared_library();
-
   // modules enabled by default
   enable_default_modules();
 
@@ -557,6 +587,13 @@ int main(int argc, char* argv[]) {
 
   // check if compiled with debug symbols
   check_debug_symbols(args[0]);
+
+  // get architecture of binary
+  int arch = get_architecture(args[0]);
+  log("Binary is %d bit\n", arch == ARCH_32 ? 32 : 64);
+
+  // extract fault inject library
+  extract_shared_library(arch);
 
   // disable aslr to always get correct debug infos over multiple injection runs
   disable_aslr();
