@@ -646,5 +646,6 @@ int main(int argc, char* argv[]) {
   summary(args[0], crash_count, injections, crashes, types);
 
   map(crashes)->destroy();
+  map(types)->destroy();
   return 0;
 }
