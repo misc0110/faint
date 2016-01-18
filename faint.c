@@ -299,6 +299,36 @@ void disable_aslr() {
 }
 
 // ---------------------------------------------------------------------------
+void print_fault_position(char* binary, void* fault, int type, int count) {
+  char m_file[256], m_function[256];
+  int m_line;
+  if(get_file_and_line(binary, fault, m_file, &m_line, m_function)) {
+    if(count != -1) {
+      log(" >  [%s] %s in %s line %d: %d calls \n", modules[type], m_function, m_file, m_line, count);
+    } else {
+      log(" >  [%s] %s in %s line %d\n", modules[type], m_function, m_file, m_line);
+    }
+  } else {
+    log(" > N/A (maybe you forgot to compile with -g?)\n");
+  }
+}
+
+// ---------------------------------------------------------------------------
+void crash_details(char* binary, void* crash, void* fault, cmap* types) {
+  char crash_file[256], fault_file[256], crash_fnc[256], fault_fnc[256];
+  int crash_line, fault_line;
+
+  log("Crashed at %p, caused by %p [%s]\n", crash, fault, modules[(size_t) map(types)->get(fault)]);
+  if(get_file_and_line(binary, crash, crash_file, &crash_line, crash_fnc)
+      && get_file_and_line(binary, fault, fault_file, &fault_line, fault_fnc)) {
+    log("  > crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
+    log("  > %s: %s (%s) line %d\n", modules[(size_t) map(types)->get(crash)], fault_fnc, fault_file, fault_line);
+  } else {
+    log("No crash details available (maybe you forgot to compile with -g?)\n");
+  }
+}
+
+// ---------------------------------------------------------------------------
 void summary(char* binary, int crash_count, int injections, cmap* crashes, cmap* types) {
   log("\n");
   log("======= SUMMARY =======\n");
@@ -322,19 +352,9 @@ void summary(char* binary, int crash_count, int injections, cmap* crashes, cmap*
     it = map(crashes)->iterator();
     while(!map_iterator(it)->end()) {
       void* crash = map_iterator(it)->key();
-      void* m = map_iterator(it)->value();
-      char crash_file[256], malloc_file[256], crash_fnc[256], malloc_fnc[256];
-      int crash_line, malloc_line;
+      void* fault = map_iterator(it)->value();
       log("\n");
-      log("Crashed at %p, caused by %p [%s]\n", crash, m, modules[(size_t) map(types)->get(m)]);
-      if(get_file_and_line(binary, crash, crash_file, &crash_line, crash_fnc)
-          && get_file_and_line(binary, m, malloc_file, &malloc_line, malloc_fnc)) {
-        log("   > crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
-        log("   > %s: %s (%s) line %d\n", modules[(size_t) map(types)->get(m)], malloc_fnc, malloc_file, malloc_line);
-      } else {
-        log("   > N/A (maybe you forgot to compile with -g?)\n");
-      }
-
+      crash_details(binary, crash, fault, types);
       map_iterator(it)->next();
     }
     map_iterator(it)->destroy();
@@ -343,6 +363,7 @@ void summary(char* binary, int crash_count, int injections, cmap* crashes, cmap*
   }
 }
 
+// ---------------------------------------------------------------------------
 int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls, cmap* types) {
 
   FILE* f = fopen("profile", "rb");
@@ -362,14 +383,31 @@ int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls,
   int i;
   *calls = 0;
   for(i = 0; i < injections; i++) {
-    fread(&((*addr)[i]), sizeof(size_t), 1, f);
-    fread(&((*count)[i]), sizeof(size_t), 1, f);
-    fread(&((*type)[i]), sizeof(size_t), 1, f);
-    map(types)->set((void*) addr[i], (void*) type[i]);
+    fread(*addr + i, sizeof(size_t), 1, f);
+    fread(*count + i, sizeof(size_t), 1, f);
+    fread(*type + i, sizeof(size_t), 1, f);
+    map(types)->set((void*) ((*addr)[i]), (void*) ((*type)[i]));
     (*calls) += (*count)[i];
   }
   fclose(f);
   return injections;
+}
+
+int wait_for_child(pid_t pid) {
+  int status, killed = 0;
+  waitpid(pid, &status, 0);
+
+  if(WIFEXITED(status)) {
+    int ret = WEXITSTATUS(status);
+    log("Exited, status: %d %s%s%s\n", ret, ret >= 128 ? "(" : "", ret >= 128 ? strsignal(ret - 128) : "",
+        ret >= 128 ? ")" : "");
+  } else if(WIFSIGNALED(status)) {
+    log("Killed by signal %d (%s)\n", WTERMSIG(status), strsignal(WTERMSIG(status)));
+    killed = 1;
+  } else if(WIFSTOPPED(status)) {
+    log("Stopped by signal %d (%s)\n", WSTOPSIG(status), strsignal(WTERMSIG(status)));
+  }
+  return killed;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,10 +469,10 @@ int main(int argc, char* argv[]) {
   int crash_count = 0;
   int injections = 0;
 
-  pid_t p = fork();
-  if(p) {
+  pid_t pid = fork();
+  if(pid) {
     int status;
-    waitpid(p, &status, 0);
+    waitpid(pid, &status, 0);
     if(!WIFEXITED(status)) {
       log("There was an error while profiling, aborting now\n");
       exit(1);
@@ -444,19 +482,13 @@ int main(int argc, char* argv[]) {
     // profiling done, fork to inject
     size_t calls = 0;
 
-    size_t *m_addr, *m_count, *m_type;
-    injections = parse_profiling(&m_addr, &m_count, &m_type, &calls, types);
+    size_t *fault_addr, *fault_count, *fault_type;
+    injections = parse_profiling(&fault_addr, &fault_count, &fault_type, &calls, types);
 
     log("Found %d different injection positions with %d call(s)\n", injections, calls);
 
     for(i = 0; i < injections; i++) {
-      char m_file[256], m_function[256];
-      int m_line;
-      if(get_file_and_line(args[0], (void*) (m_addr[i]), m_file, &m_line, m_function)) {
-        log(" >  [%s] %s in %s line %d: %d calls \n", modules[m_type[i]], m_function, m_file, m_line, m_count[i]);
-      } else {
-        log(" > N/A (maybe you forgot to compile with -g?)\n");
-      }
+      print_fault_position(args[0], (void*)(fault_addr[i]), fault_type[i], fault_count[i]);
     }
     log("\n");
 
@@ -465,36 +497,14 @@ int main(int argc, char* argv[]) {
     log("\n");
 
     for(i = 0; i < injections; i++) {
-      p = fork();
-      if(p) {
-        int status, killed = 0;
-        waitpid(p, &status, 0);
-
-        if(WIFEXITED(status)) {
-          int ret = WEXITSTATUS(status);
-          log("Exited, status: %d %s%s%s\n", ret, ret >= 128 ? "(" : "", ret >= 128 ? strsignal(ret - 128) : "",
-              ret >= 128 ? ")" : "");
-        } else if(WIFSIGNALED(status)) {
-          log("Killed by signal %d (%s)\n", WTERMSIG(status), strsignal(WTERMSIG(status)));
-          killed = 1;
-        } else if(WIFSTOPPED(status)) {
-          log("Stopped by signal %d (%s)\n", WSTOPSIG(status), strsignal(WTERMSIG(status)));
-        }
+      pid = fork();
+      if(pid) {
+        int killed = wait_for_child(pid);
 
         void *crash, *m;
         int has_addr = get_crash_address(&crash, &m);
         if(has_addr) {
-          char crash_file[256], malloc_file[256], crash_fnc[256], malloc_fnc[256];
-          int crash_line, malloc_line;
-          log("Crashed at %p, caused by %p [%s]\n", crash, m, modules[(size_t) map(types)->get(m)]);
-          if(get_file_and_line(args[0], crash, crash_file, &crash_line, crash_fnc)
-              && get_file_and_line(args[0], m, malloc_file, &malloc_line, malloc_fnc)) {
-            log("Crash details: \n");
-            log(" > crash: %s (%s) @ %d\n", crash_fnc, crash_file, crash_line);
-            log(" > %s: %s (%s) @ %d\n", modules[(size_t) map(types)->get(m)], malloc_fnc, malloc_file, malloc_line);
-          } else {
-            log("No crash details available (maybe you forgot to compile with -g?)\n");
-          }
+          crash_details(args[0], crash, m, types);
           map(crashes)->set(crash, m);
           crash_count++;
         } else {
@@ -507,13 +517,7 @@ int main(int argc, char* argv[]) {
         log("\n");
         log("Inject fault #%d\n", (i + 1));
         log("Fault position:\n");
-        char m_file[256], m_function[256];
-        int m_line;
-        if(get_file_and_line(args[0], (void*) (m_addr[i]), m_file, &m_line, m_function)) {
-          log(" >  [%s] %s in %s line %d\n", modules[m_type[i]], m_function, m_file, m_line);
-        } else {
-          log("Position not available (maybe you forgot to compile with -g?)\n");
-        }
+        print_fault_position(args[0], (void*)(fault_addr[i]), fault_type[i], -1);
         log("\n");
 
         // -> inject
@@ -525,9 +529,9 @@ int main(int argc, char* argv[]) {
         exit(0);
       }
     }
-    free(m_addr);
-    free(m_count);
-    free(m_type);
+    free(fault_addr);
+    free(fault_count);
+    free(fault_type);
   } else {
     // -> profile
     set_mode(PROFILE);
