@@ -81,30 +81,79 @@ void disable_module(const char* m) {
 }
 
 // ---------------------------------------------------------------------------
+char* str_replace(const char* orig, char* rep, char* with) {
+  char *result, *tmp;
+  int len_rep, len_with, len_front, count;
+
+  if(!orig)
+    return NULL;
+  if(!rep)
+    rep = "";
+  len_rep = strlen(rep);
+  if(!with)
+    with = "";
+  len_with = strlen(with);
+
+  const char* ins = orig;
+  for(count = 0; (tmp = strstr(ins, rep)); ++count) {
+    ins = tmp + len_rep;
+  }
+
+  tmp = result = malloc(strlen(orig) + (len_with - len_rep) * count + 1);
+
+  if(!result)
+    return NULL;
+
+  while(count--) {
+    ins = strstr(orig, rep);
+    len_front = ins - orig;
+    tmp = strncpy(tmp, orig, len_front) + len_front;
+    tmp = strcpy(tmp, with) + len_with;
+    orig += len_front + len_rep;
+  }
+  strcpy(tmp, orig);
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 void log(const char *format, ...) {
   static int count = 0;
   time_t timer;
-  char buffer[26];
+  char buffer[26], time_buffer[28];
   struct tm* tm_info;
 
+  // replace newlines with tag
+  #define LOG_TAG "[ FAINT ] "
+
+  char* tag_format = str_replace(format, "\n", "\n" LOG_TAG);
+
+  // print to stdio
   va_list args;
   va_start(args, format);
-  printf("[ FAINT ] ");
-  vprintf(format, args);
+  printf("%s", LOG_TAG);
+  vprintf(tag_format, args);
+  printf("\n");
   va_end(args);
 
+  // print to logfile
   va_start(args, format);
   FILE* f = fopen("log.txt", count == 0 ? "w" : "a");
 
   time(&timer);
   tm_info = localtime(&timer);
   strftime(buffer, 26, "%H:%M:%S", tm_info);
-  fprintf(f, "[%s] ", buffer);
+  sprintf(time_buffer, "\n[%s] ", buffer);
 
-  vfprintf(f, format, args);
+  char* file_format = str_replace(format, "\n", time_buffer);
+  fprintf(f, "[%s] ", buffer);
+  vfprintf(f, file_format, args);
+  fprintf(f, "\n");
   fclose(f);
   va_end(args);
   count++;
+
+  free(tag_format);
+  free(file_format);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,14 +242,13 @@ void cleanup() {
   remove("profile");
   remove("crash");
   remove("fault_inject.so");
-  log("\n");
-  log("\n");
-  log("finished successfully!\n");
+  log("\n\nfinished successfully!");
 }
 
 // ---------------------------------------------------------------------------
 void usage(char* binary) {
-  printf("Usage: %s \t[--enable [module] --disable [module] --list-modules \n\t\t --no-memory --all] <binary to test> [arg1] [...]\n",
+  printf(
+      "Usage: %s \t[--enable [module] --disable [module] --list-modules \n\t\t --no-memory --all] <binary to test> [arg1] [...]\n",
       binary);
   printf("\n");
   printf("--list-modules\n\t\t Lists all available modules which can be enabled/disabled\n\n");
@@ -218,11 +266,11 @@ void extract_shared_library() {
 
   FILE* so = fopen("./fault_inject.so", "wb");
   if(!so) {
-    log("Could not extract 'fault_inject.so'. Aborting.\n");
+    log("Could not extract 'fault_inject.so'. Aborting.");
     exit(1);
   }
   if(fwrite(fault_lib, fault_lib_size, 1, so) != 1) {
-    log("Could not write to file 'fault_inject.so'. Aborting.\n");
+    log("Could not write to file 'fault_inject.so'. Aborting.");
     fclose(so);
     exit(1);
   }
@@ -273,7 +321,7 @@ int parse_commandline(int argc, char* argv[]) {
         enable_module("fwrite");
         enable_module("fgets");
       } else {
-        log("Unknown command: %s\n", cmd);
+        log("Unknown command: %s", cmd);
         exit(1);
       }
     } else {
@@ -284,7 +332,7 @@ int parse_commandline(int argc, char* argv[]) {
   write_settings();
   for(i = 0; i < MODULE_COUNT; i++) {
     if(settings.modules & (1 << i)) {
-      log("Activate module '%s'\n", modules[i]);
+      log("Activate module '%s'", modules[i]);
     }
   }
   log("\n");
@@ -301,7 +349,6 @@ void check_debug_symbols(char* binary) {
     fgets(debug_lines, 32, dbg);
     if(atoi(debug_lines) == 0) {
       log("Could not find debugging info! Did you compile with -g?\n");
-      log("\n");
     }
     pclose(dbg);
   }
@@ -310,9 +357,9 @@ void check_debug_symbols(char* binary) {
 // ---------------------------------------------------------------------------
 void disable_aslr() {
   if(personality(ADDR_NO_RANDOMIZE) == -1) {
-    log("Could not turn off ASLR: %s\n", strerror(errno));
+    log("Could not turn off ASLR: %s", strerror(errno));
   } else {
-    log("ASLR turned off successfully\n");
+    log("ASLR turned off successfully");
   }
 }
 
@@ -322,12 +369,12 @@ void print_fault_position(char* binary, void* fault, int type, int count) {
   int m_line;
   if(get_file_and_line(binary, fault, m_file, &m_line, m_function)) {
     if(count != -1) {
-      log(" >  [%s] %s in %s line %d: %d calls \n", modules[type], m_function, m_file, m_line, count);
+      log(" >  [%s] %s in %s line %d: %d calls", modules[type], m_function, m_file, m_line, count);
     } else {
-      log(" >  [%s] %s in %s line %d\n", modules[type], m_function, m_file, m_line);
+      log(" >  [%s] %s in %s line %d", modules[type], m_function, m_file, m_line);
     }
   } else {
-    log(" > N/A (maybe you forgot to compile with -g?)\n");
+    log(" > N/A (maybe you forgot to compile with -g?)");
   }
 }
 
@@ -336,22 +383,20 @@ void crash_details(char* binary, void* crash, void* fault, cmap* types) {
   char crash_file[256], fault_file[256], crash_fnc[256], fault_fnc[256];
   int crash_line, fault_line;
 
-  log("Crashed at %p, caused by %p [%s]\n", crash, fault, modules[(size_t) map(types)->get(fault)]);
+  log("Crashed at %p, caused by %p [%s]", crash, fault, modules[(size_t) map(types)->get(fault)]);
   if(get_file_and_line(binary, crash, crash_file, &crash_line, crash_fnc)
       && get_file_and_line(binary, fault, fault_file, &fault_line, fault_fnc)) {
-    log("  > crash: %s (%s) line %d\n", crash_fnc, crash_file, crash_line);
-    log("  > %s: %s (%s) line %d\n", modules[(size_t) map(types)->get(fault)], fault_fnc, fault_file, fault_line);
+    log("  > crash: %s (%s) line %d", crash_fnc, crash_file, crash_line);
+    log("  > %s: %s (%s) line %d", modules[(size_t) map(types)->get(fault)], fault_fnc, fault_file, fault_line);
   } else {
-    log("No crash details available (maybe you forgot to compile with -g?)\n");
+    log("No crash details available (maybe you forgot to compile with -g?)");
   }
 }
 
 // ---------------------------------------------------------------------------
 void summary(char* binary, int crash_count, int injections, cmap* crashes, cmap* types) {
-  log("\n");
-  log("======= SUMMARY =======\n");
-  log("\n");
-  log("Crashed at %d from %d injections\n", crash_count, injections);
+  log("\n======= SUMMARY =======\n");
+  log("Crashed at %d from %d injections", crash_count, injections);
 
   int unique = 0;
   cmap_iterator* it = map(crashes)->iterator();
@@ -362,22 +407,21 @@ void summary(char* binary, int crash_count, int injections, cmap* crashes, cmap*
   map_iterator(it)->destroy();
 
   log("Unique crashes: %d\n", unique);
-  log("\n");
 
   if(crash_count > 0) {
-    log("Crash details:\n");
+    log("Crash details:");
 
     it = map(crashes)->iterator();
     while(!map_iterator(it)->end()) {
       void* crash = map_iterator(it)->key();
       void* fault = map_iterator(it)->value();
-      log("\n");
+      log("");
       crash_details(binary, crash, fault, types);
       map_iterator(it)->next();
     }
     map_iterator(it)->destroy();
   } else {
-    log("Everything ok, no crashes detected!\n");
+    log("Everything ok, no crashes detected!");
   }
 }
 
@@ -437,7 +481,6 @@ int main(int argc, char* argv[]) {
   atexit(cleanup);
 
   log("Starting, Version 1.0\n");
-  log("\n");
 
   // extract fault inject library
   extract_shared_library();
@@ -456,14 +499,14 @@ int main(int argc, char* argv[]) {
   int i;
   for(i = 0; i < argc - binary_pos; i++) {
     if(i > 0) {
-      log(" Param %2d: %s\n", i, argv[i + binary_pos]);
+      log(" Param %2d: %s", i, argv[i + binary_pos]);
     } else {
-      log("Binary: %s\n", argv[i + binary_pos]);
+      log("Binary: %s", argv[i + binary_pos]);
     }
     args[i] = argv[i + binary_pos];
   }
   args[i] = NULL;
-  log("\n");
+  log("");
 
   set_filename(args[0]);
 
@@ -474,10 +517,10 @@ int main(int argc, char* argv[]) {
   disable_aslr();
 
   // fork first to profile
-  log("Profiling start\n");
+  log("Profiling start");
   FILE* f = fopen("profile", "wb");
   if(!f) {
-    log("Need write access to file 'profile'!\n");
+    log("Need write access to file 'profile'!");
     exit(1);
   }
   fclose(f);
@@ -492,27 +535,26 @@ int main(int argc, char* argv[]) {
     int status;
     waitpid(pid, &status, 0);
     if(!WIFEXITED(status)) {
-      log("There was an error while profiling, aborting now\n");
+      log("There was an error while profiling, aborting now");
       exit(1);
     }
 
-    log("Profiling done\n");
+    log("Profiling done");
     // profiling done, fork to inject
     size_t calls = 0;
 
     size_t *fault_addr, *fault_count, *fault_type;
     injections = parse_profiling(&fault_addr, &fault_count, &fault_type, &calls, types);
 
-    log("Found %d different injection positions with %d call(s)\n", injections, calls);
+    log("Found %d different injection positions with %d call(s)", injections, calls);
 
     for(i = 0; i < injections; i++) {
-      print_fault_position(args[0], (void*)(fault_addr[i]), fault_type[i], fault_count[i]);
+      print_fault_position(args[0], (void*) (fault_addr[i]), fault_type[i], fault_count[i]);
     }
-    log("\n");
+    log("");
 
     // let one specific function fail per loop iteration
-    log("Injecting %d faults, one for every injection position\n", injections);
-    log("\n");
+    log("Injecting %d faults, one for every injection position", injections);
 
     for(i = 0; i < injections; i++) {
       pid = fork();
@@ -529,21 +571,19 @@ int main(int argc, char* argv[]) {
           if(killed)
             crash_count++;
         }
-        log("Injection #%d done\n", (i + 1));
+        log("Injection #%d done", (i + 1));
       } else {
-        log("\n");
-        log("\n");
-        log("Inject fault #%d\n", (i + 1));
-        log("Fault position:\n");
-        print_fault_position(args[0], (void*)(fault_addr[i]), fault_type[i], -1);
-        log("\n");
+        log("\n\nInject fault #%d", (i + 1));
+        log("Fault position:");
+        print_fault_position(args[0], (void*) (fault_addr[i]), fault_type[i], -1);
+        log("");
 
         // -> inject
         clear_crash_report();
         set_mode(INJECT);
         set_limit(i);
         execve(args[0], args, envs);
-        log("Could not execute %s\n", args[0]);
+        log("Could not execute %s", args[0]);
         exit(0);
       }
     }
@@ -554,7 +594,7 @@ int main(int argc, char* argv[]) {
     // -> profile
     set_mode(PROFILE);
     execve(args[0], args, envs);
-    log("Could not execute %s\n", args[0]);
+    log("Could not execute %s", args[0]);
     exit(0);
   }
 
