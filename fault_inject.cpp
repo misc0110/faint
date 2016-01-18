@@ -31,7 +31,7 @@ static FaultSettings settings;
 map_declare(faults);
 map_declare(types);
 
-void* current_malloc = NULL;
+void* current_fault = NULL;
 
 //-----------------------------------------------------------------------------
 void block() {
@@ -257,7 +257,7 @@ int handle_inject(const char* name, T* function) {
   }
 
   void* addr = get_return_address(0);
-  current_malloc = addr;
+  current_fault = addr;
 
   if(settings.mode == PROFILE) {
     NoIntercept n;
@@ -370,7 +370,7 @@ void segfault_handler(int sig) {
 
   // write crash report
   FILE* f = real_fopen("crash", "wb");
-  fwrite(&current_malloc, sizeof(void*), 1, f);
+  fwrite(&current_fault, sizeof(void*), 1, f);
   fwrite(&crash_addr, sizeof(void*), 1, f);
   fclose(f);
   unblock();
