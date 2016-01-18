@@ -30,7 +30,7 @@ runcpp: faint testcpp
 	./faint testcpp
 	
 run-io: faint test
-	./faint --enable fopen --enable getline --enable fgets test
+	./faint --no-memory --file-io test
 	
 install: faint
 	cp faint /usr/bin/faint

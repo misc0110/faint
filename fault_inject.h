@@ -39,6 +39,8 @@ typedef void (*h_exit)(int);
 typedef FILE* (*h_fopen)(const char*, const char*);
 typedef ssize_t (*h_getline)(char**, size_t*, FILE*);
 typedef char* (*h_fgets)(char*, int, FILE*);
+typedef size_t (*h_fread)(void*, size_t, size_t, FILE*);
+typedef size_t (*h_fwrite)(const void*, size_t, size_t, FILE*);
 
 extern "C" __cxa_eh_globals* __cxa_get_globals();
 #endif

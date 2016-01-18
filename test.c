@@ -51,6 +51,10 @@ int main() {
   printf("fgets: %s\n", fgets(buffer, 256, f));
   printf("%s\n", buffer);
 
+  if(!fread(buffer, 256, 1, f)) {
+    *(int*)(0) = 1;
+  }
+
   fclose(f);
 
   return 0;

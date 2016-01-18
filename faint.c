@@ -205,9 +205,11 @@ void usage(char* binary) {
   printf("\n");
   printf("--list-modules\n\t\t Lists all available modules which can be enabled/disabled\n\n");
   printf("--all\n\t\t Enable all modules\n\n");
+  printf("--none\n\t\t Disable all modules\n\n");
   printf("--enable [module]\n\t\t Enables the module\n\n");
   printf("--disable [module]\n\t\t Disables the module\n\n");
   printf("--no-memory\n\t\t Disable all memory allocation modules\n\n");
+  printf("--file-io\n\t\t Enable all File I/O modules\n\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +262,16 @@ int parse_commandline(int argc, char* argv[]) {
         for(j = 1; j < MODULE_COUNT; j++) {
           enable_module(modules[j]);
         }
+      } else if(!strcmp(cmd, "none")) {
+        int j;
+        for(j = 1; j < MODULE_COUNT; j++) {
+          disable_module(modules[j]);
+        }
+      } else if(!strcmp(cmd, "file-io")) {
+        enable_module("fopen");
+        enable_module("fread");
+        enable_module("fwrite");
+        enable_module("fgets");
       } else {
         log("Unknown command: %s\n", cmd);
         exit(1);

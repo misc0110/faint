@@ -23,6 +23,8 @@ static h_calloc real_calloc = NULL;
 static h_fopen real_fopen = NULL;
 static h_getline real_getline = NULL;
 static h_fgets real_fgets = NULL;
+static h_fread real_fread = NULL;
+static h_fwrite real_fwrite = NULL;
 
 static unsigned int no_intercept = 0;
 
@@ -73,9 +75,11 @@ static void _init(void) {
   real_fopen = (h_fopen) dlsym(RTLD_NEXT, "fopen");
   real_getline = (h_getline) dlsym(RTLD_NEXT, "getline"); // don't check for NULL, might not be available
   real_fgets = (h_fgets) dlsym(RTLD_NEXT, "fgets");
+  real_fread = (h_fread) dlsym(RTLD_NEXT, "fread");
+  real_fwrite = (h_fwrite) dlsym(RTLD_NEXT, "fwrite");
 
   if(real_malloc == NULL || real_abort == NULL || real_exit == NULL || real_exit1 == NULL || real_realloc == NULL
-      || real_calloc == NULL || real_fopen == NULL || real_fgets == NULL) {
+      || real_calloc == NULL || real_fopen == NULL || real_fgets == NULL || real_fread == NULL || real_fwrite == NULL) {
     fprintf(stderr, "Error in `dlsym`: %s\n", dlerror());
     unblock();
     return;
@@ -351,6 +355,26 @@ char* fgets(char* buffer, int size, FILE* f) {
   } else {
     NoIntercept n;
     return real_fgets(buffer, size, f);
+  }
+}
+
+//-----------------------------------------------------------------------------
+size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  if(handle_inject<h_fread>("fread", &real_fread)) {
+    return 0;
+  } else {
+    NoIntercept n;
+    return real_fread(ptr, size, nmemb, stream);
+  }
+}
+
+//-----------------------------------------------------------------------------
+size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
+  if(handle_inject<h_fwrite>("fwrite", &real_fwrite)) {
+    return 0;
+  } else {
+    NoIntercept n;
+    return real_fwrite(ptr, size, nmemb, stream);
   }
 }
 
