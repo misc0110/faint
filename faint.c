@@ -54,14 +54,14 @@ void set_limit(int lim) {
 }
 
 // ---------------------------------------------------------------------------
-void set_filename(char* fn) {
+void set_filename(const char* fn) {
   strncpy(settings.filename, fn, 255);
   settings.filename[255] = 0;
   write_settings();
 }
 
 // ---------------------------------------------------------------------------
-void enable_module(char* m) {
+void enable_module(const char* m) {
   int i;
   for(i = 0; i < MODULE_COUNT; i++) {
     if(!strcmp(m, modules[i])) {
@@ -71,7 +71,7 @@ void enable_module(char* m) {
 }
 
 // ---------------------------------------------------------------------------
-void disable_module(char* m) {
+void disable_module(const char* m) {
   int i;
   for(i = 0; i < MODULE_COUNT; i++) {
     if(!strcmp(m, modules[i])) {
@@ -111,7 +111,7 @@ void log(const char *format, ...) {
 void list_modules() {
   int i;
   log("Available modules:\n");
-  for(i = 0; i < MODULE_COUNT; i++) {
+  for(i = 1; i < MODULE_COUNT; i++) {
     log(" > %s\n", modules[i]);
   }
 }
@@ -200,13 +200,14 @@ void cleanup() {
 
 // ---------------------------------------------------------------------------
 void usage(char* binary) {
-  printf("Usage: %s [--enable [module] --disable [module] --list-modules --no-memory] <binary to test> [arg1] [...]\n",
+  printf("Usage: %s \t[--enable [module] --disable [module] --list-modules \n\t\t --no-memory --all] <binary to test> [arg1] [...]\n",
       binary);
   printf("\n");
-  printf("--list-modules\t Lists all available modules which can be enabled/disabled\n\n");
-  printf("--enable [module]\t Enables the module\n\n");
-  printf("--disable [module]\t Disables the module\n\n");
-  printf("--no-memory\t Disable all memory allocation modules");
+  printf("--list-modules\n\t\t Lists all available modules which can be enabled/disabled\n\n");
+  printf("--all\n\t\t Enable all modules\n\n");
+  printf("--enable [module]\n\t\t Enables the module\n\n");
+  printf("--disable [module]\n\t\t Disables the module\n\n");
+  printf("--no-memory\n\t\t Disable all memory allocation modules\n\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +255,11 @@ int parse_commandline(int argc, char* argv[]) {
         disable_module("calloc");
         disable_module("realloc");
         disable_module("new");
+      } else if(!strcmp(cmd, "all")) {
+        int j;
+        for(j = 1; j < MODULE_COUNT; j++) {
+          enable_module(modules[j]);
+        }
       } else {
         log("Unknown command: %s\n", cmd);
         exit(1);
