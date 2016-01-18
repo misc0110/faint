@@ -29,6 +29,9 @@ run: faint test
 runcpp: faint testcpp
 	./faint testcpp
 	
+run-io: faint test
+	./faint --enable fopen --enable getline test
+	
 install: faint
 	cp faint /usr/bin/faint
 	

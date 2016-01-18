@@ -11,7 +11,8 @@ const char* modules[] = {
   "realloc",
   "calloc",
   "new",
-  "fopen"
+  "fopen",
+  "getline"
 };
 #define MODULE_COUNT (sizeof(modules) / sizeof(modules[0]))
 

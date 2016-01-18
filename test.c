@@ -38,13 +38,16 @@ int main() {
   }
   char* line = NULL;
   size_t len;
-  //getline(&line, &len, f);
-  //printf("%s\n", line);
+  int ret = getline(&line, &len, f);
+  printf("read ok: %d, line: %p\n", ret, line);
+  printf("%s\n", line);
 
+  /*
   char buffer[256];
   fgets(buffer, 256, f);
   printf("%s\n", buffer);
   free(line);
+  */
   fclose(f);
 
   return 0;

@@ -21,6 +21,7 @@ static h_exit real_exit1 = NULL;
 static h_realloc real_realloc = NULL;
 static h_calloc real_calloc = NULL;
 static h_fopen real_fopen = NULL;
+static h_getline real_getline = NULL;
 
 static unsigned int no_intercept = 0;
 
@@ -32,27 +33,12 @@ map_declare(types);
 
 void* current_malloc = NULL;
 
-/*class NoIntercept {
-  private:
-    const char* from;
-  public:
-    NoIntercept(const char* where) {
-      from = where;
-    }
-    void block() {
-      __sync_add_and_fetch(&no_intercept, 1);
-      printf("^ %d (%s)\n", no_intercept, from);
-    }
-    void unblock() {
-      if(no_intercept > 0) __sync_sub_and_fetch(&no_intercept, 1);
-      printf("v %d (%s)\n", no_intercept, from);
-    }
-};*/
-
+//-----------------------------------------------------------------------------
 void block() {
   no_intercept++;
 }
 
+//-----------------------------------------------------------------------------
 void unblock() {
   if(no_intercept == 0) {
     printf("Something went wrong with locking!\n");
@@ -60,6 +46,18 @@ void unblock() {
   }
   no_intercept--;
 }
+
+//-----------------------------------------------------------------------------
+class NoIntercept {
+  private:
+  public:
+    NoIntercept() {
+      block();
+    }
+    ~NoIntercept() {
+      unblock();
+    }
+};
 
 //-----------------------------------------------------------------------------
 static void _init(void) {
@@ -71,7 +69,8 @@ static void _init(void) {
   real_exit1 = (h_exit) dlsym(RTLD_NEXT, "_exit");
   real_realloc = (h_realloc) dlsym(RTLD_NEXT, "realloc");
   real_calloc = (h_calloc) dlsym(RTLD_NEXT, "calloc");
-  real_fopen = (h_fopen)dlsym(RTLD_NEXT, "fopen");
+  real_fopen = (h_fopen) dlsym(RTLD_NEXT, "fopen");
+  real_getline = (h_getline) dlsym(RTLD_NEXT, "getline"); // don't check for NULL, might not be available
 
   if(real_malloc == NULL || real_abort == NULL || real_exit == NULL || real_exit1 == NULL || real_realloc == NULL
       || real_calloc == NULL || real_fopen == NULL) {
@@ -80,7 +79,6 @@ static void _init(void) {
     return;
   }
 
-  //no_intercept = 1;
   // read settings from file
   FILE *f = real_fopen("settings", "rb");
   if(f) {
@@ -205,23 +203,16 @@ void* get_return_address(int index) {
 
 //-----------------------------------------------------------------------------
 void save_trace(const char* type) {
-  //NoIntercept n;
-  // get callee address
-  //no_intercept = 1;
   if(!no_intercept) {
-    printf("WTF? Can't intercept tracing! (%s)\n", type);
+    printf("Error locking tracing! (%s)\n", type);
     return;
   }
-  void* p = get_return_address(0); //__builtin_return_address(1);
-
-  //printf("0x%x\n", p);
+  void* caller = get_return_address(0);
 
   Dl_info info;
-  if(dladdr(p, &info)) {
-    //printf("%s\n", info.dli_fname);
+  if(dladdr(caller, &info)) {
     if(info.dli_fname && strcmp(info.dli_fname, settings.filename) != 0) {
       // not our file
-      //no_intercept = 0;
       return;
     }
   }
@@ -231,12 +222,12 @@ void save_trace(const char* type) {
   if(!types)
     map_initialize(types, MAP_GENERAL);
 
-  if(map(faults)->has(p)) {
-    map(faults)->set(p, (void*) ((size_t) (map(faults)->get(p)) + 1));
+  if(map(faults)->has(caller)) {
+    map(faults)->set(caller, (void*) ((size_t) (map(faults)->get(caller)) + 1));
   } else {
-    map(faults)->set(p, (void*) 1);
+    map(faults)->set(caller, (void*) 1);
   }
-  map(types)->set(p, (void*) get_module_id(type));
+  map(types)->set(caller, (void*) get_module_id(type));
 
   FILE* f = real_fopen("profile", "wb");
   cmap_iterator* it = map(faults)->iterator();
@@ -251,17 +242,14 @@ void save_trace(const char* type) {
   }
   map_iterator(it)->destroy();
   fclose(f);
-  //no_intercept = 0;
 }
 
-
 //-----------------------------------------------------------------------------
-template <typename T>
+template<typename T>
 int handle_inject(const char* name, T* function) {
   if(*function == NULL) {
-    block();
+    NoIntercept n;
     _init();
-    unblock();
   }
 
   if(!module_active(name) || no_intercept) {
@@ -272,9 +260,8 @@ int handle_inject(const char* name, T* function) {
   current_malloc = addr;
 
   if(settings.mode == PROFILE) {
-    block();
+    NoIntercept n;
     save_trace(name);
-    unblock();
     return 0;
   } else if(settings.mode == INJECT) {
     if(!map(faults)->has(addr)) {
@@ -299,10 +286,8 @@ void *malloc(size_t size) {
   if(handle_inject<h_malloc>("malloc", &real_malloc)) {
     return NULL;
   } else {
-    block();
-    void* addr = real_malloc(size);
-    unblock();
-    return addr;
+    NoIntercept n;
+    return real_malloc(size);
   }
 }
 
@@ -311,10 +296,8 @@ void *realloc(void* mem, size_t size) {
   if(handle_inject<h_realloc>("realloc", &real_realloc)) {
     return NULL;
   } else {
-    block();
-    void* addr = real_realloc(mem, size);
-    unblock();
-    return addr;
+    NoIntercept n;
+    return real_realloc(mem, size);
   }
 }
 
@@ -323,10 +306,8 @@ void *calloc(size_t elem, size_t size) {
   if(handle_inject<h_calloc>("calloc", &real_calloc)) {
     return NULL;
   } else {
-    block();
-    void* addr = real_calloc(elem, size);
-    unblock();
-    return addr;
+    NoIntercept n;
+    return real_calloc(elem, size);
   }
 }
 
@@ -336,10 +317,8 @@ void* operator new(size_t size) {
     throw std::bad_alloc();
     return NULL;
   } else {
-    block();
-    void* addr = real_malloc(size);
-    unblock();
-    return addr;
+    NoIntercept n;
+    return real_malloc(size);
   }
 }
 
@@ -348,10 +327,18 @@ FILE *fopen(const char* name, const char* mode) {
   if(handle_inject<h_fopen>("fopen", &real_fopen)) {
     return NULL;
   } else {
-    block();
-    FILE* f = real_fopen(name, mode);
-    unblock();
-    return f;
+    NoIntercept n;
+    return real_fopen(name, mode);
+  }
+}
+
+//-----------------------------------------------------------------------------
+ssize_t getline(char** lineptr, size_t* len, FILE* stream) {
+  if(handle_inject<h_getline>("getline", &real_getline)) {
+    return -1;
+  } else {
+    NoIntercept n;
+    return real_getline(lineptr, len, stream);
   }
 }
 
