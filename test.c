@@ -31,5 +31,21 @@ int main() {
   int* a = do_mem(10);
   a[0] = 1;
   free(a);
+
+  FILE* f = fopen("test.c", "r");
+  if(!f) {
+    printf("WUT?\n");
+  }
+  char* line = NULL;
+  size_t len;
+  //getline(&line, &len, f);
+  //printf("%s\n", line);
+
+  char buffer[256];
+  fgets(buffer, 256, f);
+  printf("%s\n", buffer);
+  free(line);
+  fclose(f);
+
   return 0;
 }
