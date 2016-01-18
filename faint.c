@@ -290,7 +290,7 @@ void cleanup() {
 // ---------------------------------------------------------------------------
 void usage(char* binary) {
   printf(
-      "Usage: %s \t[--enable [module] --disable [module] --list-modules \n\t\t --no-memory --all] <binary to test> [arg1] [...]\n",
+      "Usage: %s \t[--colorlog --list-modules --all --none --no-memory --file-io\n\t\t --enable [module] --disable [module]]\n\t\t <binary to test> [arg1] [...]\n",
       binary);
   printf("\n");
   printf("--list-modules\n\t\t Lists all available modules which can be enabled/disabled\n\n");
@@ -301,6 +301,7 @@ void usage(char* binary) {
   printf("--no-memory\n\t\t Disable all memory allocation modules\n\n");
   printf("--file-io\n\t\t Enable all File I/O modules\n\n");
   printf("--colorlog\n\t\t Enable log output with colors\n\n");
+  printf("\nfaint is Copyright (c) 2016, and GNU GPL'd, by Michael Schwarz.\n\n");
 }
 
 // ---------------------------------------------------------------------------
