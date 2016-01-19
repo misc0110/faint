@@ -169,9 +169,9 @@ void log(const char *format, ...) {
   // print to stdio
   va_list args;
   va_start(args, format);
-  printf("%s", LOG_TAG);
-  vprintf(tag_format, args);
-  printf("\n");
+  fprintf(stderr, "%s", LOG_TAG);
+  vfprintf(stderr, tag_format, args);
+  fprintf(stderr, "\n");
   va_end(args);
 
   // print to logfile
