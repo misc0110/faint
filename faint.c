@@ -254,7 +254,10 @@ int get_file_and_line(const char* binary, const void* addr, char *file, int *lin
   }
 
   // get function name
-  fgets(buf, 256, f);
+  if(!fgets(buf, 256, f)) {
+    pclose(f);
+    return 0;
+  }
   strcpy(function, buf);
   int i;
   for(i = 0; i < strlen(function); i++) {
@@ -265,7 +268,10 @@ int get_file_and_line(const char* binary, const void* addr, char *file, int *lin
   }
 
   // get file and line
-  fgets(buf, 256, f);
+  if(!fgets(buf, 256, f)) {
+    pclose(f);
+    return 0;
+  }
 
   if(buf[0] != '?') {
     char *p = buf;
@@ -417,7 +423,10 @@ void check_debug_symbols(const char* binary) {
   FILE* dbg = popen(re_cmdline, "r");
   if(dbg) {
     char debug_lines[32];
-    fgets(debug_lines, 32, dbg);
+    if(!fgets(debug_lines, 32, dbg)) {
+      pclose(dbg);
+      return;
+    }
     if(atoi(debug_lines) == 0) {
       log("{red}Could not find debugging info! Did you compile with -g?{/red}\n");
     }
@@ -433,7 +442,10 @@ int get_architecture(const char* binary) {
   FILE* dbg = popen(obj_cmdline, "r");
   if(dbg) {
     char debug_lines[256];
-    fgets(debug_lines, 256, dbg);
+    if(!fgets(debug_lines, 256, dbg)) {
+      pclose(dbg);
+      return arch;
+    }
     if(strstr(debug_lines, "elf32") != NULL) arch = ARCH_32;
     if(strstr(debug_lines, "elf64") != NULL) arch = ARCH_64;
     pclose(dbg);
@@ -533,7 +545,9 @@ int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls,
   *calls = 0;
   for(i = 0; i < injections; i++) {
     ProfileEntry e;
-    fread(&e, sizeof(ProfileEntry), 1, f);
+    if(!fread(&e, sizeof(ProfileEntry), 1, f)) {
+      break;
+    }
 
     (*addr)[i] = (size_t)e.address;
     (*count)[i] = (size_t)e.count;
