@@ -23,6 +23,9 @@ map32.o: map.c
 test: test.c
 	gcc test.c -Wall -g -o test
 	
+test32: test.c
+	gcc test.c -Wall -g -m32 -o test32
+	
 testcpp: test.cpp
 	g++ test.cpp -Wall -g -o testcpp
 	
@@ -34,6 +37,9 @@ run: faint test
 	
 runcpp: faint testcpp
 	./faint testcpp
+	
+run32: faint test32
+	./faint test32
 	
 run-io: faint test
 	./faint --no-memory --file-io test

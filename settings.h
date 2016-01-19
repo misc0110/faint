@@ -1,6 +1,8 @@
 #ifndef _MR_H_
 #define _MR_H_
 
+#include <stdint.h>
+
 enum Mode {
   PROFILE, INJECT
 };
@@ -20,10 +22,21 @@ const char* modules[] = {
 #define MODULE_COUNT (sizeof(modules) / sizeof(modules[0]))
 
 typedef struct {
-    enum Mode mode;
-    int limit;
+    int32_t limit;
     char filename[256];
-    unsigned int modules;
+    uint32_t modules;
+    enum Mode mode;
 }__attribute__((packed)) FaultSettings;
+
+typedef struct {
+    uint64_t address;
+    uint64_t count;
+    uint64_t type;
+}__attribute__((packed)) ProfileEntry;
+
+typedef struct {
+    uint64_t fault;
+    uint64_t crash;
+}__attribute__((packed)) CrashEntry;
 
 #endif

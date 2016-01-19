@@ -223,11 +223,15 @@ int get_crash_address(void** crash, void** fault_addr) {
   FILE* f = fopen("crash", "rb");
   if(!f)
     return 0;
-  int s1 = fread(fault_addr, sizeof(void*), 1, f);
-  int s = fread(crash, sizeof(void*), 1, f);
-  fclose(f);
-  if(s == 0 || s1 == 0)
+  CrashEntry e;
+  int s = fread(&e, sizeof(CrashEntry), 1, f);
+  if(s == 0) {
+    fclose(f);
     return 0;
+  }
+  *fault_addr = (void*)e.fault;
+  *crash = (void*)e.crash;
+  fclose(f);
   return 1;
 }
 
@@ -513,7 +517,7 @@ int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls,
   }
   fseek(f, 0, SEEK_END);
   size_t fsize = ftell(f);
-  size_t injections = fsize / (3 * sizeof(size_t));
+  size_t injections = fsize / sizeof(ProfileEntry);
   fseek(f, 0, SEEK_SET);
 
   *addr = malloc(sizeof(size_t) * injections);
@@ -523,9 +527,12 @@ int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls,
   int i;
   *calls = 0;
   for(i = 0; i < injections; i++) {
-    fread(*addr + i, sizeof(size_t), 1, f);
-    fread(*count + i, sizeof(size_t), 1, f);
-    fread(*type + i, sizeof(size_t), 1, f);
+    ProfileEntry e;
+    fread(&e, sizeof(ProfileEntry), 1, f);
+
+    (*addr)[i] = (size_t)e.address;
+    (*count)[i] = (size_t)e.count;
+    (*type)[i] = (size_t)e.type;
     map(types)->set((void*) ((*addr)[i]), (void*) ((*type)[i]));
     (*calls) += (*count)[i];
   }
