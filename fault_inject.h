@@ -1,4 +1,6 @@
 /*
+ * Shared library to let specific function calls fail
+ * Used to test fault handling of programs.
  * 
  * 01/2016 by Michael Schwarz 
  *

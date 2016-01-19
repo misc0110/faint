@@ -1,6 +1,5 @@
 /*
- * Automatic fault tester. Needs fault_inject.so to be present in the
- * working directory.
+ * Automatic fault tester.
  * 
  * 01/2016 by Michael Schwarz 
  *
@@ -166,7 +165,7 @@ void log(const char *format, ...) {
   str_replace_inplace(&tag_format, "{cyan}", colorlog ? ANSI_COLOR_CYAN : "");
   str_replace_inplace(&tag_format, "{/cyan}", colorlog ? ANSI_COLOR_RESET : "");
 
-  // print to stdio
+  // print to stderr
   va_list args;
   va_start(args, format);
   fprintf(stderr, "%s", LOG_TAG);
@@ -234,8 +233,8 @@ int get_crash_address(void** crash, void** fault_addr) {
     fclose(f);
     return 0;
   }
-  *fault_addr = (void*)e.fault;
-  *crash = (void*)e.crash;
+  *fault_addr = (void*) e.fault;
+  *crash = (void*) e.crash;
   fclose(f);
   return 1;
 }
@@ -454,8 +453,10 @@ int get_architecture(const char* binary) {
       pclose(dbg);
       return arch;
     }
-    if(strstr(debug_lines, "elf32") != NULL) arch = ARCH_32;
-    if(strstr(debug_lines, "elf64") != NULL) arch = ARCH_64;
+    if(strstr(debug_lines, "elf32") != NULL)
+      arch = ARCH_32;
+    if(strstr(debug_lines, "elf64") != NULL)
+      arch = ARCH_64;
     pclose(dbg);
   }
   return arch;
@@ -560,9 +561,9 @@ int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls,
       break;
     }
 
-    (*addr)[i] = (size_t)e.address;
-    (*count)[i] = (size_t)e.count;
-    (*type)[i] = (size_t)e.type;
+    (*addr)[i] = (size_t) e.address;
+    (*count)[i] = (size_t) e.count;
+    (*type)[i] = (size_t) e.type;
     map(types)->set((void*) ((*addr)[i]), (void*) ((*type)[i]));
     (*calls) += (*count)[i];
   }
