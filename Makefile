@@ -1,59 +1,67 @@
-all: faint test testcpp
+CC = gcc
+CXX = g++
+CFLAGS = -Wall -g
+CXXFLAGS = -Wall -g
 
-faint: faint.o map.c fault_inject 
-	gcc -Wall -g -c map.c -o map_c.o
-	gcc faint.o map_c.o -Wall -g -Wl,--format=binary -Wl,fault_inject.so -Wl,--format=binary -Wl,fault_inject32.so -Wl,--format=default -o faint
+OUTPUTDIR = ./bin
+MKDIR_OUT = mkdir -p $(OUTPUTDIR)
+OBJDIR = ./obj
+MKDIR_OBJ = mkdir -p $(OBJDIR)
 
-faint.o: faint.c
-	gcc -c faint.c -Wall -g -fno-builtin-log -o faint.o
 
-# faint can compile a 32bit version but this is not recommended, as the 64 bit version can also profile 32 bit binaries 
-#faint32: faint32.o map.c fault_inject 
-#	gcc -Wall -m32 -g -c map.c -o map_c32.o
-#	gcc faint32.o map_c32.o -m32 -Wall -g -Wl,--format=binary -Wl,fault_inject.so -Wl,--format=binary -Wl,fault_inject32.so -Wl,--format=default -o faint32
+all: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test $(OUTPUTDIR)/testcpp
 
-#faint32.o: faint.c
-#	gcc -c -m32 faint.c -Wall -g -fno-builtin-log -o faint32.o
+$(OBJDIR):
+	$(MKDIR_OUT)
+	$(MKDIR_OBJ)
 
-fault_inject: fault_inject.cpp map.o map32.o
-	g++ -Wall -fPIC -DPIC -c -g -fno-stack-protector -funwind-tables -fpermissive fault_inject.cpp
-	g++ -shared -g -o fault_inject.so map.o fault_inject.o -ldl
+$(OUTPUTDIR)/faint: $(OBJDIR) $(OBJDIR)/faint.o map.c $(OBJDIR)/fault_inject 
+	$(CC) $(CFLAGS) -c map.c -o $(OBJDIR)/map_c.o
+	cd $(OBJDIR); $(CC) faint.o map_c.o $(CFLAGS) -Wl,--format=binary -Wl,fault_inject.so -Wl,--format=binary -Wl,fault_inject32.so -Wl,--format=default -o faint
+	mv $(OBJDIR)/faint $(OUTPUTDIR)/faint
 
-	g++ -Wall -fPIC -DPIC -c -g -fno-stack-protector -funwind-tables -fpermissive -m32 fault_inject.cpp -o fault_inject32.o
-	g++ -shared -g -m32 -o fault_inject32.so map32.o fault_inject32.o -ldl
+$(OBJDIR)/faint.o: faint.c
+	$(CC) -c faint.c $(CFLAGS) -fno-builtin-log -o $(OBJDIR)/faint.o
+
+$(OBJDIR)/fault_inject: fault_inject.cpp $(OBJDIR)/map.o $(OBJDIR)/map32.o
+	$(CXX) $(CXXFLAGS) -fPIC -DPIC -c -fno-stack-protector -funwind-tables -fpermissive fault_inject.cpp -o $(OBJDIR)/fault_inject.o
+	$(CXX) $(CXXFLAGS) -shared -o $(OBJDIR)/fault_inject.so $(OBJDIR)/map.o $(OBJDIR)/fault_inject.o -ldl
+
+	$(CXX) $(CXXFLAGS) -fPIC -DPIC -c -fno-stack-protector -funwind-tables -fpermissive -m32 fault_inject.cpp -o $(OBJDIR)/fault_inject32.o
+	$(CXX) $(CXXFLAGS) -shared -m32 -o $(OBJDIR)/fault_inject32.so $(OBJDIR)/map32.o $(OBJDIR)/fault_inject32.o -ldl
 	
-map.o: map.c
-	g++ map.c -fPIC -DPIC -Wall -c -g -o map.o
+$(OBJDIR)/map.o: map.c
+	$(CXX) $(CXXFLAGS) map.c -fPIC -DPIC -c -o $(OBJDIR)/map.o
 
-map32.o: map.c
-	g++ map.c -fPIC -DPIC -Wall -c -g -m32 -o map32.o
+$(OBJDIR)/map32.o: map.c
+	$(CXX) $(CXXFLAGS) map.c -fPIC -DPIC -c -m32 -o $(OBJDIR)/map32.o
 		
-test: test.c
-	gcc test.c -Wall -g -o test
+$(OUTPUTDIR)/test: test.c
+	$(CC) $(CFLAGS) test.c -o $(OUTPUTDIR)/test
 	
-test32: test.c
-	gcc test.c -Wall -g -m32 -o test32
+$(OUTPUTDIR)/test32: test.c
+	$(CC) $(CFLAGS) test.c -m32 -o $(OUTPUTDIR)/test32
 	
-testcpp: test.cpp
-	g++ test.cpp -Wall -g -o testcpp
+$(OUTPUTDIR)/testcpp: test.cpp
+	$(CXX) $(CXXFLAGS) test.cpp -o $(OUTPUTDIR)/testcpp
 	
 clean:
-	-rm -f *.so *.o faint test mallocs profile settings testcpp
+	-rm -rf $(OUTPUTDIR) $(OBJDIR)
 	
-run: faint test
-	./faint test
+run: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test
+	$(OUTPUTDIR)/faint $(OUTPUTDIR)/test
 	
-runcpp: faint testcpp
-	./faint testcpp
+runcpp: $(OUTPUTDIR)/faint $(OUTPUTDIR)/testcpp
+	$(OUTPUTDIR)/faint $(OUTPUTDIR)/testcpp
 	
-run32: faint test32
-	./faint test32
+run32: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test32
+	$(OUTPUTDIR)/faint $(OUTPUTDIR)/test32
 	
-run-io: faint test
-	./faint --no-memory --file-io test
+run-io: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test
+	$(OUTPUTDIR)/faint --no-memory --file-io $(OUTPUTDIR)/test
 	
-install: faint
-	cp faint /usr/bin/faint
+install: $(OUTPUTDIR)/faint
+	cp $(OUTPUTDIR)/faint /usr/bin/faint
 	
 uninstall: 
 	rm /usr/bin/faint

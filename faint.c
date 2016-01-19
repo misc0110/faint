@@ -591,6 +591,12 @@ int main(int argc, char* argv[]) {
     } else {
       // get architecture of binary
       set_filename(argv[i + binary_pos]);
+      FILE* test = fopen(get_filename(), "rb");
+      if(!test) {
+        log("{red}Could not find file '%s'!{/red}", get_filename());
+        return 1;
+      }
+      fclose(test);
       arch = get_architecture(get_filename());
 
       log("Binary: %s (%d bit)", get_filename(), arch == ARCH_32 ? 32 : 64);
