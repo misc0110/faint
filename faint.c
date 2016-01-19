@@ -35,10 +35,15 @@
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
+#define ARCH_32   0
+#define ARCH_64   1
+
 FaultSettings settings;
 
 extern uint8_t fault_lib[] asm("_binary_fault_inject_so_start");
 extern uint8_t fault_lib_end[] asm("_binary_fault_inject_so_end");
+extern uint8_t fault_lib32[] asm("_binary_fault_inject32_so_start");
+extern uint8_t fault_lib32_end[] asm("_binary_fault_inject32_so_end");
 
 int colorlog = 0;
 
@@ -68,6 +73,11 @@ void set_filename(const char* fn) {
   strncpy(settings.filename, fn, 255);
   settings.filename[255] = 0;
   write_settings();
+}
+
+// ---------------------------------------------------------------------------
+const char* get_filename() {
+  return settings.filename;
 }
 
 // ---------------------------------------------------------------------------
@@ -218,16 +228,20 @@ int get_crash_address(void** crash, void** fault_addr) {
   FILE* f = fopen("crash", "rb");
   if(!f)
     return 0;
-  int s1 = fread(fault_addr, sizeof(void*), 1, f);
-  int s = fread(crash, sizeof(void*), 1, f);
-  fclose(f);
-  if(s == 0 || s1 == 0)
+  CrashEntry e;
+  int s = fread(&e, sizeof(CrashEntry), 1, f);
+  if(s == 0) {
+    fclose(f);
     return 0;
+  }
+  *fault_addr = (void*)e.fault;
+  *crash = (void*)e.crash;
+  fclose(f);
   return 1;
 }
 
 // ---------------------------------------------------------------------------
-int get_file_and_line(char* binary, void* addr, char *file, int *line, char* function) {
+int get_file_and_line(const char* binary, const void* addr, char *file, int *line, char* function) {
   static char buf[256];
 
   // call addr2line
@@ -240,7 +254,10 @@ int get_file_and_line(char* binary, void* addr, char *file, int *line, char* fun
   }
 
   // get function name
-  fgets(buf, 256, f);
+  if(!fgets(buf, 256, f)) {
+    pclose(f);
+    return 0;
+  }
   strcpy(function, buf);
   int i;
   for(i = 0; i < strlen(function); i++) {
@@ -251,7 +268,10 @@ int get_file_and_line(char* binary, void* addr, char *file, int *line, char* fun
   }
 
   // get file and line
-  fgets(buf, 256, f);
+  if(!fgets(buf, 256, f)) {
+    pclose(f);
+    return 0;
+  }
 
   if(buf[0] != '?') {
     char *p = buf;
@@ -288,7 +308,7 @@ void cleanup() {
 }
 
 // ---------------------------------------------------------------------------
-void usage(char* binary) {
+void usage(const char* binary) {
   printf(
       "Usage: %s \t[--colorlog --list-modules --all --none --no-memory --file-io\n\t\t --enable [module] --disable [module]]\n\t\t <binary to test> [arg1] [...]\n",
       binary);
@@ -305,8 +325,13 @@ void usage(char* binary) {
 }
 
 // ---------------------------------------------------------------------------
-void extract_shared_library() {
-  size_t fault_lib_size = (size_t) ((char*) fault_lib_end - (char*) fault_lib);
+void extract_shared_library(int arch) {
+  size_t fault_lib_size;
+  if(arch == ARCH_32) {
+    fault_lib_size = (size_t) ((char*) fault_lib32_end - (char*) fault_lib32);
+  } else {
+    fault_lib_size = (size_t) ((char*) fault_lib_end - (char*) fault_lib);
+  }
 
   FILE* so = fopen("./fault_inject.so", "rb");
   if(so) {
@@ -320,7 +345,14 @@ void extract_shared_library() {
     log("{red}Could not extract 'fault_inject.so'. Aborting.{/red}");
     exit(1);
   }
-  if(fwrite(fault_lib, fault_lib_size, 1, so) != 1) {
+
+  int write_ret;
+  if(arch == ARCH_32) {
+    write_ret = fwrite(fault_lib32, fault_lib_size, 1, so);
+  } else {
+    write_ret = fwrite(fault_lib, fault_lib_size, 1, so);
+  }
+  if(write_ret != 1) {
     log("{red}Could not write to file 'fault_inject.so'. Aborting.{/red}");
     fclose(so);
     exit(1);
@@ -393,18 +425,40 @@ int parse_commandline(int argc, char* argv[]) {
 }
 
 // ---------------------------------------------------------------------------
-void check_debug_symbols(char* binary) {
+void check_debug_symbols(const char* binary) {
   char re_cmdline[256];
   sprintf(re_cmdline, "readelf --debug-dump=line \"%s\" | wc -l", binary);
   FILE* dbg = popen(re_cmdline, "r");
   if(dbg) {
     char debug_lines[32];
-    fgets(debug_lines, 32, dbg);
+    if(!fgets(debug_lines, 32, dbg)) {
+      pclose(dbg);
+      return;
+    }
     if(atoi(debug_lines) == 0) {
       log("{red}Could not find debugging info! Did you compile with -g?{/red}\n");
     }
     pclose(dbg);
   }
+}
+
+// ---------------------------------------------------------------------------
+int get_architecture(const char* binary) {
+  int arch = ARCH_64;
+  char obj_cmdline[256];
+  sprintf(obj_cmdline, "objdump -f \"%s\" | grep elf", binary);
+  FILE* dbg = popen(obj_cmdline, "r");
+  if(dbg) {
+    char debug_lines[256];
+    if(!fgets(debug_lines, 256, dbg)) {
+      pclose(dbg);
+      return arch;
+    }
+    if(strstr(debug_lines, "elf32") != NULL) arch = ARCH_32;
+    if(strstr(debug_lines, "elf64") != NULL) arch = ARCH_64;
+    pclose(dbg);
+  }
+  return arch;
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +471,7 @@ void disable_aslr() {
 }
 
 // ---------------------------------------------------------------------------
-void print_fault_position(char* binary, void* fault, int type, int count) {
+void print_fault_position(const char* binary, const void* fault, int type, int count) {
   char m_file[256], m_function[256];
   int m_line;
   if(get_file_and_line(binary, fault, m_file, &m_line, m_function)) {
@@ -434,7 +488,7 @@ void print_fault_position(char* binary, void* fault, int type, int count) {
 }
 
 // ---------------------------------------------------------------------------
-void crash_details(char* binary, void* crash, void* fault, cmap* types) {
+void crash_details(const char* binary, const void* crash, const void* fault, cmap* types) {
   char crash_file[256], fault_file[256], crash_fnc[256], fault_fnc[256];
   int crash_line, fault_line;
 
@@ -450,7 +504,7 @@ void crash_details(char* binary, void* crash, void* fault, cmap* types) {
 }
 
 // ---------------------------------------------------------------------------
-void summary(char* binary, int crash_count, int injections, cmap* crashes, cmap* types) {
+void summary(const char* binary, int crash_count, int injections, cmap* crashes, cmap* types) {
   log("\n======= SUMMARY =======\n");
   log("Crashed at %d from %d injections", crash_count, injections);
 
@@ -491,7 +545,7 @@ int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls,
   }
   fseek(f, 0, SEEK_END);
   size_t fsize = ftell(f);
-  size_t injections = fsize / (3 * sizeof(size_t));
+  size_t injections = fsize / sizeof(ProfileEntry);
   fseek(f, 0, SEEK_SET);
 
   *addr = malloc(sizeof(size_t) * injections);
@@ -501,9 +555,14 @@ int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls,
   int i;
   *calls = 0;
   for(i = 0; i < injections; i++) {
-    fread(*addr + i, sizeof(size_t), 1, f);
-    fread(*count + i, sizeof(size_t), 1, f);
-    fread(*type + i, sizeof(size_t), 1, f);
+    ProfileEntry e;
+    if(!fread(&e, sizeof(ProfileEntry), 1, f)) {
+      break;
+    }
+
+    (*addr)[i] = (size_t)e.address;
+    (*count)[i] = (size_t)e.count;
+    (*type)[i] = (size_t)e.type;
     map(types)->set((void*) ((*addr)[i]), (void*) ((*type)[i]));
     (*calls) += (*count)[i];
   }
@@ -546,9 +605,6 @@ int main(int argc, char* argv[]) {
 
   log("Starting, Version 1.0\n");
 
-  // extract fault inject library
-  extract_shared_library();
-
   // modules enabled by default
   enable_default_modules();
 
@@ -560,22 +616,33 @@ int main(int argc, char* argv[]) {
   char* args[argc];
 
   // inherit all arguments
-  int i;
+  int i, arch = ARCH_64;
   for(i = 0; i < argc - binary_pos; i++) {
     if(i > 0) {
       log(" Param %2d: %s", i, argv[i + binary_pos]);
     } else {
-      log("Binary: %s", argv[i + binary_pos]);
+      // get architecture of binary
+      set_filename(argv[i + binary_pos]);
+      FILE* test = fopen(get_filename(), "rb");
+      if(!test) {
+        log("{red}Could not find file '%s'!{/red}", get_filename());
+        return 1;
+      }
+      fclose(test);
+      arch = get_architecture(get_filename());
+
+      log("Binary: %s (%d bit)", get_filename(), arch == ARCH_32 ? 32 : 64);
     }
     args[i] = argv[i + binary_pos];
   }
   args[i] = NULL;
   log("");
 
-  set_filename(args[0]);
-
   // check if compiled with debug symbols
-  check_debug_symbols(args[0]);
+  check_debug_symbols(get_filename());
+
+  // extract fault inject library
+  extract_shared_library(arch);
 
   // disable aslr to always get correct debug infos over multiple injection runs
   disable_aslr();
@@ -614,7 +681,7 @@ int main(int argc, char* argv[]) {
     log("Found %d different injection positions with %d call(s)", injections, calls);
 
     for(i = 0; i < injections; i++) {
-      print_fault_position(args[0], (void*) (fault_addr[i]), fault_type[i], fault_count[i]);
+      print_fault_position(get_filename(), (void*) (fault_addr[i]), fault_type[i], fault_count[i]);
     }
     log("");
 
@@ -629,7 +696,7 @@ int main(int argc, char* argv[]) {
         void *crash, *fault;
         int has_addr = get_crash_address(&crash, &fault);
         if(has_addr) {
-          crash_details(args[0], crash, fault, types);
+          crash_details(get_filename(), crash, fault, types);
           map(crashes)->set(crash, fault);
           crash_count++;
         } else {
@@ -640,15 +707,15 @@ int main(int argc, char* argv[]) {
       } else {
         log("\n\n{green}Inject fault #%d{/green}", (i + 1));
         log("Fault position:");
-        print_fault_position(args[0], (void*) (fault_addr[i]), fault_type[i], -1);
+        print_fault_position(get_filename(), (void*) (fault_addr[i]), fault_type[i], -1);
         log("");
 
         // -> inject
         clear_crash_report();
         set_mode(INJECT);
         set_limit(i);
-        execve(args[0], args, envs);
-        log("Could not execute %s", args[0]);
+        execve(get_filename(), args, envs);
+        log("Could not execute %s", get_filename());
         exit(0);
       }
     }
@@ -658,12 +725,12 @@ int main(int argc, char* argv[]) {
   } else {
     // -> profile
     set_mode(PROFILE);
-    execve(args[0], args, envs);
-    log("{red}Could not execute %s{/red}", args[0]);
+    execve(get_filename(), args, envs);
+    log("{red}Could not execute %s{/red}", get_filename());
     exit(0);
   }
 
-  summary(args[0], crash_count, injections, crashes, types);
+  summary(get_filename(), crash_count, injections, crashes, types);
 
   map(crashes)->destroy();
   map(types)->destroy();

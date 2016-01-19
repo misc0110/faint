@@ -103,20 +103,15 @@ static void _init(void) {
     if(f) {
       int entry = 0;
       while(!feof(f)) {
-        void* addr;
-        void* cnt;
-        void* type;
-        fread(&addr, sizeof(void*), 1, f);
-        fread(&cnt, sizeof(void*), 1, f);
-        if(fread(&type, sizeof(void*), 1, f) == 0)
+        ProfileEntry e;
+        if(fread(&e, sizeof(ProfileEntry), 1, f) == 0)
           break;
-        //printf("%x -> %d\n", addr, cnt);
         if(entry == settings.limit)
-          cnt = (void*) 1;
+          e.count = 1;
         else
-          cnt = (void*) 0;
-        map(faults)->set(addr, cnt);
-        map(types)->set(addr, type);
+          e.count = 0;
+        map(faults)->set((void*)e.address, (void*)e.count);
+        map(types)->set((void*)e.address, (void*)e.type);
         entry++;
       }
     }
@@ -240,10 +235,12 @@ void save_trace(const char* type) {
   while(!map_iterator(it)->end()) {
     void* k = map_iterator(it)->key();
     void* v = map_iterator(it)->value();
-    fwrite(&k, sizeof(void*), 1, f);
-    fwrite(&v, sizeof(void*), 1, f);
-    void* type = map(types)->get(k);
-    fwrite(&type, sizeof(void*), 1, f);
+    ProfileEntry e;
+    e.address = (uint64_t)k;
+    e.count = (uint64_t)v;
+    e.type = (uint64_t)map(types)->get(k);
+
+    fwrite(&e, sizeof(ProfileEntry), 1, f);
     map_iterator(it)->next();
   }
   map_iterator(it)->destroy();
@@ -399,15 +396,13 @@ void _exit(int val) {
 void segfault_handler(int sig) {
   block();
 
-  void* crash_addr = NULL;
-
-  // find crash address in backtrace
-  crash_addr = get_return_address(0);
-
   // write crash report
   FILE* f = real_fopen("crash", "wb");
-  fwrite(&current_fault, sizeof(void*), 1, f);
-  fwrite(&crash_addr, sizeof(void*), 1, f);
+  CrashEntry e;
+  e.crash = (uint64_t)get_return_address(0);;
+  e.fault = (uint64_t)current_fault;
+
+  fwrite(&e, sizeof(CrashEntry), 1, f);
   fclose(f);
   unblock();
   real_exit1(sig + 128);

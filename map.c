@@ -29,15 +29,15 @@ void cmap_entry_dump(cmap_entry* start) {
 }
 
 // ---------------------------------------------------------------------------
-void cmap_entry_append(cmap_entry* start, void* key, void* value) {
+void cmap_entry_append(cmap_entry* start, const void* key, const void* value) {
   start->value = (void*) (((size_t) start->value) + 1);
   while(start->next) {
     start = start->next;
   }
   start->next = (cmap_entry*) map_allocate(sizeof(cmap_entry));
   start->next->next = NULL;
-  start->next->key = key;
-  start->next->value = value;
+  start->next->key = (void*)key;
+  start->next->value = (void*)value;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,17 +61,17 @@ cmap* map(cmap* m) {
 }
 
 // ---------------------------------------------------------------------------
-int map_hash(void* key, int size) {
+int map_hash(const void* key, int size) {
   return (long) key % size;
 }
 
 // ---------------------------------------------------------------------------
-int map_key_compare(void* key1, void* key2) {
+int map_key_compare(const void* key1, const void* key2) {
   return key1 == key2;
 }
 
 // ---------------------------------------------------------------------------
-cmap_entry* _map_key_position(cmap* m, void* key) {
+cmap_entry* _map_key_position(cmap* m, const void* key) {
   int position = m->hash(key, m->size);
   cmap_entry* start = (m->data[position]).next;
   while(start) {
@@ -104,27 +104,27 @@ void _map_resize(cmap* m, int new_size) {
 }
 
 // ---------------------------------------------------------------------------
-void* map_get(void* key) {
+void* map_get(const void* key) {
   cmap_entry* entry = _map_key_position(this, key);
   objreturn
 (  entry ? entry->value : NULL);
 }
 
 // ---------------------------------------------------------------------------
-int map_exists(void* key) {
+int map_exists(const void* key) {
   cmap_entry* entry = _map_key_position(this, key);
   objreturn
 (  entry ? 1 : 0);
 }
 
 // ---------------------------------------------------------------------------
-void map_set(void* key, void* value) {
+void map_set(const void* key, const void* value) {
   // check if already exists
   cmap_entry* exist = _map_key_position(this, key);
   if(exist) {
-    exist->value = value;
-    objreturn
-;  }
+    exist->value = (void*)value;
+    objreturn;
+  }
 
   // otherwise, append
   int position = this->hash(key, this->size);
@@ -136,7 +136,7 @@ void map_set(void* key, void* value) {
 ;}
 
 // ---------------------------------------------------------------------------
-void map_unset(void* key) {
+void map_unset(const void* key) {
   int position = this->hash(key, this->size);
   cmap_entry* last = &(this->data[position]);
   cmap_entry* start = last->next;
@@ -303,7 +303,7 @@ void _map_init(cmap** m) {
 }
 
 // ---------------------------------------------------------------------------
-int map_hash_str(void *str_, int size) {
+int map_hash_str(const void *str_, int size) {
   unsigned char* str = (unsigned char*) str_;
   int hash = 5381;
   int c;
@@ -314,7 +314,7 @@ int map_hash_str(void *str_, int size) {
 }
 
 // ---------------------------------------------------------------------------
-int map_compare_str(void* key1_, void* key2_) {
+int map_compare_str(const void* key1_, const void* key2_) {
   char* key1 = (char*) key1_;
   char* key2 = (char*) key2_;
   while(*key1 || *key2) {

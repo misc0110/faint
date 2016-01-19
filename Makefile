@@ -1,39 +1,67 @@
-all: faint test testcpp
+CC = gcc
+CXX = g++
+CFLAGS = -Wall -g
+CXXFLAGS = -Wall -g
 
-faint: faint.o map.c fault_inject 
-	gcc -Wall -g -c map.c -o map_c.o
-	gcc faint.o map_c.o -Wall -g -Wl,--format=binary -Wl,fault_inject.so -Wl,--format=default -o faint
+OUTPUTDIR = ./bin
+MKDIR_OUT = mkdir -p $(OUTPUTDIR)
+OBJDIR = ./obj
+MKDIR_OBJ = mkdir -p $(OBJDIR)
 
-faint.o: faint.c
-	gcc -c faint.c -Wall -g -fno-builtin-log -o faint.o
 
-fault_inject: fault_inject.cpp map.o
-	g++ -Wall -fPIC -DPIC -c -g -fno-stack-protector -funwind-tables -fpermissive fault_inject.cpp
-	g++ -shared -g -o fault_inject.so map.o fault_inject.o -ldl
+all: $(OUTPUTDIR)/faint
 
-map.o: map.c
-	g++ map.c -fPIC -DPIC -Wall -c -g -o map.o
+$(OBJDIR):
+	$(MKDIR_OUT)
+	$(MKDIR_OBJ)
+
+$(OUTPUTDIR)/faint: $(OBJDIR) $(OBJDIR)/faint.o map.c $(OBJDIR)/fault_inject 
+	$(CC) $(CFLAGS) -O2 -c map.c -o $(OBJDIR)/map_c.o
+	cd $(OBJDIR); $(CC) -O2 faint.o map_c.o $(CFLAGS) -Wl,--format=binary -Wl,fault_inject.so -Wl,--format=binary -Wl,fault_inject32.so -Wl,--format=default -o faint
+	mv $(OBJDIR)/faint $(OUTPUTDIR)/faint
+
+$(OBJDIR)/faint.o: faint.c
+	$(CC) -c faint.c -O2 $(CFLAGS) -Wunused-result -fno-builtin-log -o $(OBJDIR)/faint.o
+
+$(OBJDIR)/fault_inject: fault_inject.cpp $(OBJDIR)/map.o $(OBJDIR)/map32.o
+	$(CXX) $(CXXFLAGS) -O0 -fPIC -DPIC -c -fno-stack-protector -funwind-tables -fpermissive fault_inject.cpp -o $(OBJDIR)/fault_inject.o
+	$(CXX) $(CXXFLAGS) -O0 -shared -o $(OBJDIR)/fault_inject.so $(OBJDIR)/map.o $(OBJDIR)/fault_inject.o -ldl
+
+	$(CXX) $(CXXFLAGS) -O0 -fPIC -DPIC -c -fno-stack-protector -funwind-tables -fpermissive -m32 fault_inject.cpp -o $(OBJDIR)/fault_inject32.o
+	$(CXX) $(CXXFLAGS) -O0 -shared -m32 -o $(OBJDIR)/fault_inject32.so $(OBJDIR)/map32.o $(OBJDIR)/fault_inject32.o -ldl
 	
-test: test.c
-	gcc test.c -Wall -g -o test
+$(OBJDIR)/map.o: map.c
+	$(CXX) $(CXXFLAGS) -O2 map.c -fPIC -DPIC -c -o $(OBJDIR)/map.o
+
+$(OBJDIR)/map32.o: map.c
+	$(CXX) $(CXXFLAGS) -O2 map.c -fPIC -DPIC -c -m32 -o $(OBJDIR)/map32.o
+		
+$(OUTPUTDIR)/test: test.c
+	$(CC) $(CFLAGS) test.c -o $(OUTPUTDIR)/test
 	
-testcpp: test.cpp
-	g++ test.cpp -Wall -g -o testcpp
+$(OUTPUTDIR)/test32: test.c
+	$(CC) $(CFLAGS) test.c -m32 -o $(OUTPUTDIR)/test32
+	
+$(OUTPUTDIR)/testcpp: test.cpp
+	$(CXX) $(CXXFLAGS) test.cpp -o $(OUTPUTDIR)/testcpp
 	
 clean:
-	-rm -f *.so *.o faint test mallocs profile settings testcpp
+	-rm -rf $(OUTPUTDIR) $(OBJDIR)
 	
-run: faint test
-	./faint test
+run: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test
+	$(OUTPUTDIR)/faint $(OUTPUTDIR)/test
 	
-runcpp: faint testcpp
-	./faint testcpp
+runcpp: $(OUTPUTDIR)/faint $(OUTPUTDIR)/testcpp
+	$(OUTPUTDIR)/faint $(OUTPUTDIR)/testcpp
 	
-run-io: faint test
-	./faint --no-memory --file-io test
+run32: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test32
+	$(OUTPUTDIR)/faint $(OUTPUTDIR)/test32
 	
-install: faint
-	cp faint /usr/bin/faint
+run-io: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test
+	$(OUTPUTDIR)/faint --no-memory --file-io $(OUTPUTDIR)/test
+	
+install: $(OUTPUTDIR)/faint
+	cp $(OUTPUTDIR)/faint /usr/bin/faint
 	
 uninstall: 
 	rm /usr/bin/faint
