@@ -28,15 +28,15 @@ typedef struct {
     int entries;
 
     void (*init)(int);
-    void* (*get)(void*);
-    void (*set)(void*, void*);
+    void* (*get)(const void*);
+    void (*set)(const void*, const void*);
     void (*dump)(void);
-    int (*has)(void*);
+    int (*has)(const void*);
     void (*destroy)(void);
-    void (*unset)(void*);
+    void (*unset)(const void*);
     void (*clear)(void);
-    int (*hash)(void*, int);
-    int (*compare)(void*, void*);
+    int (*hash)(const void*, int);
+    int (*compare)(const void*, const void*);
     cmap_iterator* (*iterator)(void);
 } cmap;
 
@@ -58,8 +58,8 @@ void _map_init(cmap** m);
 cmap* map(cmap* m);
 cmap_iterator* map_iterator(cmap_iterator* it);
 
-int map_hash_str(void *str, int size);
-int map_compare_str(void* key1, void* key2);
+int map_hash_str(const void *str, int size);
+int map_compare_str(const void* key1, const void* key2);
 
 #endif
 
