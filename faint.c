@@ -1,9 +1,24 @@
-/*
- * Automatic fault tester.
- * 
- * 01/2016 by Michael Schwarz 
- *
- **/
+///////////////////////////////////////////////////////////////////////////////
+//
+//    faint - a FAult INjection Tester
+//    Copyright (C) 2016  Michael Schwarz
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//
+//    E-Mail: michael.schwarz91@gmail.com
+//
+///////////////////////////////////////////////////////////////////////////////
 
 #define _GNU_SOURCE
 
@@ -37,14 +52,14 @@
 #define ARCH_32   0
 #define ARCH_64   1
 
-FaultSettings settings;
+static FaultSettings settings;
 
 extern uint8_t fault_lib[] asm("_binary_fault_inject_so_start");
 extern uint8_t fault_lib_end[] asm("_binary_fault_inject_so_end");
 extern uint8_t fault_lib32[] asm("_binary_fault_inject32_so_start");
 extern uint8_t fault_lib32_end[] asm("_binary_fault_inject32_so_end");
 
-int colorlog = 0;
+static int colorlog = 0;
 
 // ---------------------------------------------------------------------------
 void write_settings() {
@@ -320,7 +335,8 @@ void usage(const char* binary) {
   printf("--no-memory\n\t\t Disable all memory allocation modules\n\n");
   printf("--file-io\n\t\t Enable all File I/O modules\n\n");
   printf("--colorlog\n\t\t Enable log output with colors\n\n");
-  printf("\nfaint is Copyright (c) 2016, and GNU GPL'd, by Michael Schwarz.\n\n");
+
+  printf("\nfaint is Copyright (C) 2016, and GNU GPL'd, by Michael Schwarz.\n\n");
 }
 
 // ---------------------------------------------------------------------------
