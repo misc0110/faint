@@ -378,7 +378,6 @@ void segfault_handler(int sig) {
   FILE* f = fopen("crash", "wb");
   CrashEntry e;
   e.crash = (uint64_t) get_return_address(0);
-  ;
   e.fault = (uint64_t) current_fault;
 
   fwrite(&e, sizeof(CrashEntry), 1, f);
