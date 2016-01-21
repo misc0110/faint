@@ -18,13 +18,16 @@ $(OBJDIR):
 	$(MKDIR_OUT)
 	$(MKDIR_OBJ)
 
-$(OUTPUTDIR)/faint: $(OBJDIR) $(OBJDIR)/faint.o $(SRCDIR)/map.c $(OBJDIR)/fault_inject 
+$(OUTPUTDIR)/faint: $(OBJDIR) $(OBJDIR)/faint.o $(SRCDIR)/map.c $(OBJDIR)/usage.o $(OBJDIR)/fault_inject 
 	$(CC) $(CFLAGS) -O2 -c $(SRCDIR)/map.c -o $(OBJDIR)/map_c.o
-	cd $(OBJDIR); $(CC) -O2 faint.o map_c.o $(CFLAGS) -Wl,--format=binary -Wl,fault_inject.so -Wl,--format=binary -Wl,fault_inject32.so -Wl,--format=default -o faint
+	cd $(OBJDIR); $(CC) -O2 faint.o map_c.o usage.o $(CFLAGS) -Wl,--format=binary -Wl,fault_inject.so -Wl,--format=binary -Wl,fault_inject32.so -Wl,--format=default -o faint
 	mv $(OBJDIR)/faint $(OUTPUTDIR)/faint
 
 $(OBJDIR)/faint.o: $(SRCDIR)/faint.c
 	$(CC) -c $(SRCDIR)/faint.c -O2 $(CFLAGS) -Wunused-result -fno-builtin-log -o $(OBJDIR)/faint.o
+	
+$(OBJDIR)/usage.o: $(SRCDIR)/usage.c
+	$(CC) $(CFLAGS) -O2 -c $(SRCDIR)/usage.c -o $(OBJDIR)/usage.o
 
 $(OBJDIR)/fault_inject: $(SRCDIR)/fault_inject.cpp $(OBJDIR)/map.o $(OBJDIR)/map32.o
 	$(CXX) $(CXXFLAGS) -O0 -fPIC -DPIC -c -fno-stack-protector -funwind-tables -fpermissive $(SRCDIR)/fault_inject.cpp -o $(OBJDIR)/fault_inject.o
@@ -51,21 +54,32 @@ $(OUTPUTDIR)/testcpp: $(SRCDIR)/test.cpp
 clean:
 	-rm -rf $(OUTPUTDIR) $(OBJDIR)
 	
-deb: $(OUTPUTDIR)/faint
+$(OUTPUTDIR)/manpage: $(SRCDIR)/manpage.c $(OBJDIR)/usage.o
+	$(CC) $(CCFLAGS) $(SRCDIR)/manpage.c $(OBJDIR)/usage.o -o $(OUTPUTDIR)/manpage
+	
+man: $(OUTPUTDIR)/manpage
+	./bin/manpage faint
+
+	
+deb: $(OUTPUTDIR)/faint $(OUTPUTDIR)/manpage
 	-if test `whoami` != "root"; then echo "\n\nYou need to run this target using fakeroot: fakeroot -u make deb\n"; exit 1; fi
 	mkdir -p faint_$(VERSION)
 	mkdir -p faint_$(VERSION)/usr
 	mkdir -p faint_$(VERSION)/usr/bin
-	mkdir -p faint_$(VERSION)/usr/share/doc/faint	
+	mkdir -p faint_$(VERSION)/usr/share/doc/faint
+	mkdir -p faint_$(VERSION)/usr/share/man/man1	
+	$(OUTPUTDIR)/manpage faint	
+	gzip -c -9 docs/faint.1 > faint_$(VERSION)/usr/share/man/man1/faint.1.gz
 	cp $(OUTPUTDIR)/faint faint_$(VERSION)/usr/bin
 	strip faint_$(VERSION)/usr/bin/faint
 	mkdir -p faint_$(VERSION)/DEBIAN
-	sed "s/%VERSION%/$(VERSION)/" debian-control > faint_$(VERSION)/DEBIAN/control
-	cp copyright faint_$(VERSION)/usr/share/doc/faint/
-	gzip -c -9 changelog > faint_$(VERSION)/usr/share/doc/faint/changelog.gz
+	sed "s/%VERSION%/$(VERSION)/" docs/debian-control > faint_$(VERSION)/DEBIAN/control
+	cp docs/copyright faint_$(VERSION)/usr/share/doc/faint/
+	gzip -c -9 docs/changelog > faint_$(VERSION)/usr/share/doc/faint/changelog.gz
 	chmod -R 0755 faint_$(VERSION)/usr
 	chmod 0644 faint_$(VERSION)/usr/share/doc/faint/copyright
 	chmod 0644 faint_$(VERSION)/usr/share/doc/faint/changelog.gz
+	chmod 0644 faint_$(VERSION)/usr/share/man/man1/faint.1.gz
 	chown -R root:root faint_$(VERSION)/
 	dpkg-deb --build faint_$(VERSION)
 	rm -rf faint_$(VERSION)

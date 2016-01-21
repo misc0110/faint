@@ -35,6 +35,7 @@
 #include <sys/personality.h>
 #include "settings.h"
 #include "map.h"
+#include "usage.h"
 
 #ifndef HAVE_PERSONALITY
 #include <syscall.h>
@@ -325,24 +326,6 @@ void cleanup() {
   log("\n\nfinished successfully!");
 }
 
-// ---------------------------------------------------------------------------
-void usage(const char* binary) {
-  printf(
-      "Usage: %s \t[--colorlog --list-modules --all --none --no-memory --file-io\n\t\t --enable [module] --disable [module]]\n\t\t <binary to test> [arg1] [...]\n",
-      binary);
-  printf("\n");
-  printf("--list-modules\n\t\t Lists all available modules which can be enabled/disabled\n\n");
-  printf("--all\n\t\t Enable all modules\n\n");
-  printf("--none\n\t\t Disable all modules\n\n");
-  printf("--enable [module]\n\t\t Enables the module\n\n");
-  printf("--disable [module]\n\t\t Disables the module\n\n");
-  printf("--no-memory\n\t\t Disable all memory allocation modules\n\n");
-  printf("--file-io\n\t\t Enable all File I/O modules\n\n");
-  printf("--colorlog\n\t\t Enable log output with colors\n\n");
-  printf("--version\n\t\t Show program version\n\n");
-
-  printf("\nfaint is Copyright (C) 2016, and GNU GPL'd, by Michael Schwarz.\n\n");
-}
 
 // ---------------------------------------------------------------------------
 void extract_shared_library(int arch) {
@@ -618,6 +601,13 @@ int wait_for_child(pid_t pid) {
     killed = 1;
   }
   return killed;
+}
+
+// ---------------------------------------------------------------------------
+void usage(const char* binary) {
+  Usage* u = generate_usage();
+  print_usage(binary, u);
+  destroy_usage(u);
 }
 
 // ---------------------------------------------------------------------------

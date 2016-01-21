@@ -1,0 +1,50 @@
+.TH FAINT 1
+.SH NAME
+faint \- fault injection testing for binaries
+.SH SYNOPSIS
+.B faint [\fIfaint-options\fR] [\fByour-program\fR] [\fIyour-program-options\fR]
+.SH DESCRIPTION
+.B faint\fR is an automated debugging tool to inject faults into Linux binaries.
+.SH OPTIONS
+.TP
+.BR \-\-list\-modules\fR
+Lists all available modules which can be enabled/disabled
+.TP
+.BR \-\-all\fR
+Enable all modules
+.TP
+.BR \-\-none\fR
+Disable all modules
+.TP
+.BR \-\-enable\fR\~<\fImodule\fR>
+Enables the module
+.TP
+.BR \-\-disable\fR\~<\fImodule\fR>
+Disables the module
+.TP
+.BR \-\-no\-memory\fR
+Disable all memory allocation modules
+.TP
+.BR \-\-file\-io\fR
+Enable all file I/O modules
+.TP
+.BR \-\-colorlog\fR
+Enable log output with colors
+.TP
+.BR \-\-version\fR
+Show program version
+.SH EXAMPLES
+Inspect a binary for (out of-)memory handling and display the result in colors
+.PP
+.nf
+.RS
+faint --colorlog my_binary my_arg1
+.RE
+.fi
+.PP
+.SH COPYRIGHT
+Copyright 2016 Michael Schwarz <michael.schwarz91@gmail.com>
+
+This is free software; see the  source  for  copying  conditions.
+There  is  NO  warranty;  not  even  for
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
