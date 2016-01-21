@@ -6,10 +6,11 @@ CFLAGS = -Wall -g -DVERSION="\"$(VERSION)\""
 CXXFLAGS = -Wall -g -DVERSION="\"$(VERSION)\"" 
 
 OUTPUTDIR = ./bin
-MKDIR_OUT = mkdir -p $(OUTPUTDIR)
 OBJDIR = ./obj
-MKDIR_OBJ = mkdir -p $(OBJDIR)
+SRCDIR = ./src
 
+MKDIR_OBJ = mkdir -p $(OBJDIR)
+MKDIR_OUT = mkdir -p $(OUTPUTDIR)
 
 all: $(OUTPUTDIR)/faint
 
@@ -17,35 +18,35 @@ $(OBJDIR):
 	$(MKDIR_OUT)
 	$(MKDIR_OBJ)
 
-$(OUTPUTDIR)/faint: $(OBJDIR) $(OBJDIR)/faint.o map.c $(OBJDIR)/fault_inject 
-	$(CC) $(CFLAGS) -O2 -c map.c -o $(OBJDIR)/map_c.o
+$(OUTPUTDIR)/faint: $(OBJDIR) $(OBJDIR)/faint.o $(SRCDIR)/map.c $(OBJDIR)/fault_inject 
+	$(CC) $(CFLAGS) -O2 -c $(SRCDIR)/map.c -o $(OBJDIR)/map_c.o
 	cd $(OBJDIR); $(CC) -O2 faint.o map_c.o $(CFLAGS) -Wl,--format=binary -Wl,fault_inject.so -Wl,--format=binary -Wl,fault_inject32.so -Wl,--format=default -o faint
 	mv $(OBJDIR)/faint $(OUTPUTDIR)/faint
 
-$(OBJDIR)/faint.o: faint.c
-	$(CC) -c faint.c -O2 $(CFLAGS) -Wunused-result -fno-builtin-log -o $(OBJDIR)/faint.o
+$(OBJDIR)/faint.o: $(SRCDIR)/faint.c
+	$(CC) -c $(SRCDIR)/faint.c -O2 $(CFLAGS) -Wunused-result -fno-builtin-log -o $(OBJDIR)/faint.o
 
-$(OBJDIR)/fault_inject: fault_inject.cpp $(OBJDIR)/map.o $(OBJDIR)/map32.o
-	$(CXX) $(CXXFLAGS) -O0 -fPIC -DPIC -c -fno-stack-protector -funwind-tables -fpermissive fault_inject.cpp -o $(OBJDIR)/fault_inject.o
+$(OBJDIR)/fault_inject: $(SRCDIR)/fault_inject.cpp $(OBJDIR)/map.o $(OBJDIR)/map32.o
+	$(CXX) $(CXXFLAGS) -O0 -fPIC -DPIC -c -fno-stack-protector -funwind-tables -fpermissive $(SRCDIR)/fault_inject.cpp -o $(OBJDIR)/fault_inject.o
 	$(CXX) $(CXXFLAGS) -O0 -shared -o $(OBJDIR)/fault_inject.so $(OBJDIR)/map.o $(OBJDIR)/fault_inject.o -ldl
 
-	$(CXX) $(CXXFLAGS) -O0 -fPIC -DPIC -c -fno-stack-protector -funwind-tables -fpermissive -m32 fault_inject.cpp -o $(OBJDIR)/fault_inject32.o
+	$(CXX) $(CXXFLAGS) -O0 -fPIC -DPIC -c -fno-stack-protector -funwind-tables -fpermissive -m32 $(SRCDIR)/fault_inject.cpp -o $(OBJDIR)/fault_inject32.o
 	$(CXX) $(CXXFLAGS) -O0 -shared -m32 -o $(OBJDIR)/fault_inject32.so $(OBJDIR)/map32.o $(OBJDIR)/fault_inject32.o -ldl
 	
-$(OBJDIR)/map.o: map.c
-	$(CXX) $(CXXFLAGS) -O2 map.c -fPIC -DPIC -c -o $(OBJDIR)/map.o
+$(OBJDIR)/map.o: $(SRCDIR)/map.c
+	$(CXX) $(CXXFLAGS) -O2 $(SRCDIR)/map.c -fPIC -DPIC -c -o $(OBJDIR)/map.o
 
-$(OBJDIR)/map32.o: map.c
-	$(CXX) $(CXXFLAGS) -O2 map.c -fPIC -DPIC -c -m32 -o $(OBJDIR)/map32.o
+$(OBJDIR)/map32.o: $(SRCDIR)/map.c
+	$(CXX) $(CXXFLAGS) -O2 $(SRCDIR)/map.c -fPIC -DPIC -c -m32 -o $(OBJDIR)/map32.o
 		
-$(OUTPUTDIR)/test: test.c
-	$(CC) $(CFLAGS) test.c -o $(OUTPUTDIR)/test
+$(OUTPUTDIR)/test: $(SRCDIR)/test.c
+	$(CC) $(CFLAGS) $(SRCDIR)/test.c -o $(OUTPUTDIR)/test
 	
-$(OUTPUTDIR)/test32: test.c
-	$(CC) $(CFLAGS) test.c -m32 -o $(OUTPUTDIR)/test32
+$(OUTPUTDIR)/test32: $(SRCDIR)/test.c
+	$(CC) $(CFLAGS) $(SRCDIR)/test.c -m32 -o $(OUTPUTDIR)/test32
 	
-$(OUTPUTDIR)/testcpp: test.cpp
-	$(CXX) $(CXXFLAGS) test.cpp -o $(OUTPUTDIR)/testcpp
+$(OUTPUTDIR)/testcpp: $(SRCDIR)/test.cpp
+	$(CXX) $(CXXFLAGS) $(SRCDIR)/test.cpp -o $(OUTPUTDIR)/testcpp
 	
 clean:
 	-rm -rf $(OUTPUTDIR) $(OBJDIR)
