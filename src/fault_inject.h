@@ -40,8 +40,6 @@
 typedef void* (*h_malloc)(size_t);
 typedef void* (*h_realloc)(void*, size_t);
 typedef void* (*h_calloc)(size_t, size_t);
-typedef void (*h_abort)(void);
-typedef void (*h_exit)(int);
 typedef FILE* (*h_fopen)(const char*, const char*);
 typedef ssize_t (*h_getline)(char**, size_t*, FILE*);
 typedef char* (*h_fgets)(char*, int, FILE*);
