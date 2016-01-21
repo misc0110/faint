@@ -61,6 +61,10 @@ extern uint8_t fault_lib32_end[] asm("_binary_fault_inject32_so_end");
 
 static int colorlog = 0;
 
+#ifndef VERSION
+#define VERSION "0.1-debug"
+#endif
+
 // ---------------------------------------------------------------------------
 void write_settings() {
   FILE* f = fopen("settings", "wb");
@@ -335,6 +339,7 @@ void usage(const char* binary) {
   printf("--no-memory\n\t\t Disable all memory allocation modules\n\n");
   printf("--file-io\n\t\t Enable all File I/O modules\n\n");
   printf("--colorlog\n\t\t Enable log output with colors\n\n");
+  printf("--version\n\t\t Show program version\n\n");
 
   printf("\nfaint is Copyright (C) 2016, and GNU GPL'd, by Michael Schwarz.\n\n");
 }
@@ -420,6 +425,9 @@ int parse_commandline(int argc, char* argv[]) {
         enable_module("fgets");
       } else if(!strcmp(cmd, "colorlog")) {
         colorlog = 1;
+      } else if(!strcmp(cmd, "version")) {
+        printf("faint %s\n", VERSION);
+        exit(0);
       } else {
         log("{red}Unknown command: %s{/red}", cmd);
         exit(1);
@@ -618,15 +626,14 @@ int main(int argc, char* argv[]) {
     usage(argv[0]);
     return 0;
   }
-  atexit(cleanup);
-
-  log("Starting, Version 1.0\n");
-
   // modules enabled by default
   enable_default_modules();
 
   // parse commandline
   int binary_pos = parse_commandline(argc, argv);
+
+  atexit(cleanup);
+  log("Starting, Version %s\n", VERSION);
 
   // preload fault inject library
   char* const envs[] = { (char*) "LD_PRELOAD=./fault_inject.so", NULL };

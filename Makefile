@@ -1,7 +1,9 @@
+VERSION = 0.2
+
 CC = gcc
 CXX = g++
-CFLAGS = -Wall -g
-CXXFLAGS = -Wall -g
+CFLAGS = -Wall -g -DVERSION="\"$(VERSION)\"" 
+CXXFLAGS = -Wall -g -DVERSION="\"$(VERSION)\"" 
 
 OUTPUTDIR = ./bin
 MKDIR_OUT = mkdir -p $(OUTPUTDIR)
@@ -47,6 +49,24 @@ $(OUTPUTDIR)/testcpp: test.cpp
 	
 clean:
 	-rm -rf $(OUTPUTDIR) $(OBJDIR)
+	
+deb: $(OUTPUTDIR)/faint
+	mkdir -p faint_$(VERSION)
+	mkdir -p faint_$(VERSION)/usr
+	mkdir -p faint_$(VERSION)/usr/bin
+	mkdir -p faint_$(VERSION)/usr/share/doc/faint	
+	cp $(OUTPUTDIR)/faint faint_$(VERSION)/usr/bin
+	strip faint_$(VERSION)/usr/bin/faint
+	mkdir -p faint_$(VERSION)/DEBIAN
+	sed "s/%VERSION%/$(VERSION)/" debian-control > faint_$(VERSION)/DEBIAN/control
+	cp copyright faint_$(VERSION)/usr/share/doc/faint/
+	chmod 0644 faint_$(VERSION)/usr/share/doc/faint/copyright
+	chown -R root:root faint_$(VERSION)/
+	dpkg-deb --build faint_$(VERSION)
+	rm -rf faint_$(VERSION)
+	mv faint_$(VERSION).deb $(OUTPUTDIR)
+	lintian $(OUTPUTDIR)/faint_$(VERSION).deb
+	
 	
 run: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test
 	$(OUTPUTDIR)/faint $(OUTPUTDIR)/test
