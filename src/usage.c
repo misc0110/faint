@@ -24,12 +24,11 @@
 #include <stdlib.h>
 #include "usage.h"
 
-
 // ---------------------------------------------------------------------------
-void add_entry(Usage* u, const char* name, const char* desc, int optional) {
-  UsageEntry* tmp = (UsageEntry*)realloc(u->entry, (u->size + 1) * sizeof(UsageEntry));
+int add_entry(Usage* u, const char* name, const char* desc, int optional) {
+  UsageEntry* tmp = (UsageEntry*) realloc(u->entry, (u->size + 1) * sizeof(UsageEntry));
   if(!tmp) {
-    return;
+    return 0;
   }
   tmp[u->size].name = name;
   tmp[u->size].description = desc;
@@ -37,20 +36,25 @@ void add_entry(Usage* u, const char* name, const char* desc, int optional) {
   tmp[u->size].has_param = 0;
   u->entry = tmp;
   u->size++;
+  return 1;
 }
 
 // ---------------------------------------------------------------------------
-void add_entry_param(Usage* u, const char* name, const char* desc, int optional, char* param, int param_optional) {
-  add_entry(u, name, desc, optional);
+int add_entry_param(Usage* u, const char* name, const char* desc, int optional, char* param, int param_optional) {
+  if(!add_entry(u, name, desc, optional))
+    return 0;
   u->entry[u->size - 1].has_param = 1;
   u->entry[u->size - 1].parameter.name = param;
   u->entry[u->size - 1].parameter.optional = param_optional;
+  return 1;
 }
-
 
 // ---------------------------------------------------------------------------
 Usage* generate_usage() {
-  Usage* u = (Usage*)malloc(sizeof(Usage));
+  Usage* u = (Usage*) malloc(sizeof(Usage));
+  if(!u)
+    return NULL;
+
   u->size = 0;
   u->entry = NULL;
 
@@ -68,17 +72,24 @@ Usage* generate_usage() {
 
 // ---------------------------------------------------------------------------
 void print_usage(const char* binary, Usage* u) {
+  if(!u)
+    return;
+
   printf("Usage: %s ", binary);
   int i;
   for(i = 0; i < u->size; i++) {
-    if(u->entry[i].optional) printf("[");
+    if(u->entry[i].optional)
+      printf("[");
     printf("%s", u->entry[i].name);
     if(u->entry[i].has_param) {
-      if(u->entry[i].parameter.optional) printf("[");
+      if(u->entry[i].parameter.optional)
+        printf("[");
       printf("=%s", u->entry[i].parameter.name);
-      if(u->entry[i].parameter.optional) printf("]");
+      if(u->entry[i].parameter.optional)
+        printf("]");
     }
-    if(u->entry[i].optional) printf("] ");
+    if(u->entry[i].optional)
+      printf("] ");
   }
   printf("\n\t\t\t <binary to test> [arg1] [...]\n\n");
 
@@ -94,6 +105,8 @@ void print_usage(const char* binary, Usage* u) {
 
 // ---------------------------------------------------------------------------
 void destroy_usage(Usage* u) {
+  if(!u)
+    return;
   free(u->entry);
   free(u);
 }
