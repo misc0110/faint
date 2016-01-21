@@ -3,7 +3,7 @@ Version: %VERSION%
 Section: devel
 Priority: optional
 Architecture: amd64
-Depends: readelf, objdump, addr2line, wc, libc6, libstdc++6
+Depends: binutils, libc6, libstdc++6
 Maintainer: Michael Schwarz <michael.schwarz91@gmail.com>
 Description: FAul INjection Tester is a tool to check the error handling of binaries. 
  The tool first profiles the given binary. 
