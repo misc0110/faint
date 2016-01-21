@@ -20,35 +20,44 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef _FAINT_SETTINGS_H_
-#define _FAINT_SETTINGS_H_
-
-#include <stdint.h>
+#include <string.h>
+#include "modules.h"
 
 // ---------------------------------------------------------------------------
-enum Mode {
-  PROFILE, INJECT
+const char* modules[] = {
+  "(unknown)",
+  "malloc",
+  "realloc",
+  "calloc",
+  "new",
+  "fopen",
+  "getline",
+  "fgets",
+  "fread",
+  "fwrite"
 };
 
 // ---------------------------------------------------------------------------
-typedef struct {
-    int32_t limit;
-    char filename[256];
-    uint32_t modules;
-    enum Mode mode;
-}__attribute__((packed)) FaultSettings;
+const size_t MODULE_COUNT = (sizeof(modules) / sizeof(modules[0]));
 
 // ---------------------------------------------------------------------------
-typedef struct {
-    uint64_t address;
-    uint64_t count;
-    uint64_t type;
-}__attribute__((packed)) ProfileEntry;
+size_t get_module_count() {
+  return MODULE_COUNT;
+}
 
 // ---------------------------------------------------------------------------
-typedef struct {
-    uint64_t fault;
-    uint64_t crash;
-}__attribute__((packed)) CrashEntry;
+const char* get_module(int i) {
+  return modules[i];
+}
 
-#endif
+//-----------------------------------------------------------------------------
+size_t get_module_id(const char* module) {
+  size_t i;
+  for(i = 0; i < get_module_count(); i++) {
+    if(!strcmp(module, modules[i])) {
+      return i;
+    }
+  }
+  return -1;
+}
+

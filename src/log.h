@@ -20,35 +20,13 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef _FAINT_SETTINGS_H_
-#define _FAINT_SETTINGS_H_
+#ifndef SRC_LOG_H_
+#define SRC_LOG_H_
 
-#include <stdint.h>
+void enable_logfile(int en);
+void enable_colorlog(int col);
+void set_log_name(const char* name);
+void log(const char *format, ...);
 
-// ---------------------------------------------------------------------------
-enum Mode {
-  PROFILE, INJECT
-};
 
-// ---------------------------------------------------------------------------
-typedef struct {
-    int32_t limit;
-    char filename[256];
-    uint32_t modules;
-    enum Mode mode;
-}__attribute__((packed)) FaultSettings;
-
-// ---------------------------------------------------------------------------
-typedef struct {
-    uint64_t address;
-    uint64_t count;
-    uint64_t type;
-}__attribute__((packed)) ProfileEntry;
-
-// ---------------------------------------------------------------------------
-typedef struct {
-    uint64_t fault;
-    uint64_t crash;
-}__attribute__((packed)) CrashEntry;
-
-#endif
+#endif /* SRC_LOG_H_ */

@@ -20,35 +20,13 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef _FAINT_SETTINGS_H_
-#define _FAINT_SETTINGS_H_
+#ifndef SRC_MODULES_H_
+#define SRC_MODULES_H_
 
-#include <stdint.h>
+#include <stdlib.h>
 
-// ---------------------------------------------------------------------------
-enum Mode {
-  PROFILE, INJECT
-};
+size_t get_module_count();
+const char* get_module(int i);
+size_t get_module_id(const char* module);
 
-// ---------------------------------------------------------------------------
-typedef struct {
-    int32_t limit;
-    char filename[256];
-    uint32_t modules;
-    enum Mode mode;
-}__attribute__((packed)) FaultSettings;
-
-// ---------------------------------------------------------------------------
-typedef struct {
-    uint64_t address;
-    uint64_t count;
-    uint64_t type;
-}__attribute__((packed)) ProfileEntry;
-
-// ---------------------------------------------------------------------------
-typedef struct {
-    uint64_t fault;
-    uint64_t crash;
-}__attribute__((packed)) CrashEntry;
-
-#endif
+#endif /* SRC_MODULES_H_ */

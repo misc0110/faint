@@ -66,6 +66,7 @@ Usage* generate_usage() {
   add_entry(u, "--no-memory", "Disable all memory allocation modules", 1);
   add_entry(u, "--file-io", "Enable all file I/O modules", 1);
   add_entry(u, "--colorlog", "Enable log output with colors", 1);
+  add_entry(u, "--no-logfile", "Disable log file", 1);
   add_entry(u, "--version", "Show program version", 1);
   return u;
 }

@@ -20,35 +20,20 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef _FAINT_SETTINGS_H_
-#define _FAINT_SETTINGS_H_
+#ifndef SRC_UTILS_H_
+#define SRC_UTILS_H_
 
-#include <stdint.h>
+#define ARCH_32   0
+#define ARCH_64   1
 
-// ---------------------------------------------------------------------------
-enum Mode {
-  PROFILE, INJECT
-};
 
-// ---------------------------------------------------------------------------
-typedef struct {
-    int32_t limit;
-    char filename[256];
-    uint32_t modules;
-    enum Mode mode;
-}__attribute__((packed)) FaultSettings;
+char* str_replace(const char* orig, const char* rep, const char* with);
+void str_replace_inplace(char** orig, const char* rep, const char* with);
+int get_file_and_line(const char* binary, const void* addr, char *file, int *line, char* function);
+void check_debug_symbols(const char* binary);
+int get_architecture(const char* binary);
+void disable_aslr();
+void show_return_details(int status);
+int wait_for_child(pid_t pid);
 
-// ---------------------------------------------------------------------------
-typedef struct {
-    uint64_t address;
-    uint64_t count;
-    uint64_t type;
-}__attribute__((packed)) ProfileEntry;
-
-// ---------------------------------------------------------------------------
-typedef struct {
-    uint64_t fault;
-    uint64_t crash;
-}__attribute__((packed)) CrashEntry;
-
-#endif
+#endif /* SRC_UTILS_H_ */

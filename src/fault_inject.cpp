@@ -23,6 +23,7 @@
 #include "fault_inject.h"
 #include "settings.h"
 #include "map.h"
+#include "modules.h"
 
 #include <iostream>
 #include <string.h>
@@ -141,17 +142,6 @@ static void _init(void) {
   sigaction(SIGABRT, &sig_handler, NULL);
 
   unblock();
-}
-
-//-----------------------------------------------------------------------------
-size_t get_module_id(const char* module) {
-  size_t i;
-  for(i = 0; i < MODULE_COUNT; i++) {
-    if(!strcmp(module, modules[i])) {
-      return i;
-    }
-  }
-  return -1;
 }
 
 //-----------------------------------------------------------------------------

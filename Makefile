@@ -1,9 +1,9 @@
-VERSION = 0.2
+VERSION = 0.3
 
 CC = gcc
 CXX = g++
-CFLAGS = -Wall -g -DVERSION="\"$(VERSION)\"" 
-CXXFLAGS = -Wall -g -DVERSION="\"$(VERSION)\"" 
+CFLAGS = -Wall -g -fno-builtin-log -DVERSION="\"$(VERSION)\"" 
+CXXFLAGS = -Wall -g -fno-builtin-log  -DVERSION="\"$(VERSION)\"" 
 
 OUTPUTDIR = ./bin
 OBJDIR = ./obj
@@ -18,9 +18,9 @@ $(OBJDIR):
 	$(MKDIR_OUT)
 	$(MKDIR_OBJ)
 
-$(OUTPUTDIR)/faint: $(OBJDIR) $(OBJDIR)/faint.o $(SRCDIR)/map.c $(OBJDIR)/usage.o $(OBJDIR)/fault_inject 
+$(OUTPUTDIR)/faint: $(OBJDIR) $(OBJDIR)/faint.o $(SRCDIR)/map.c $(OBJDIR)/usage.o $(OBJDIR)/utils.o $(OBJDIR)/log.o $(OBJDIR)/modules.o $(OBJDIR)/fault_inject 
 	$(CC) $(CFLAGS) -O2 -c $(SRCDIR)/map.c -o $(OBJDIR)/map_c.o
-	cd $(OBJDIR); $(CC) -O2 faint.o map_c.o usage.o $(CFLAGS) -Wl,--format=binary -Wl,fault_inject.so -Wl,--format=binary -Wl,fault_inject32.so -Wl,--format=default -o faint
+	cd $(OBJDIR); $(CC) -O2 faint.o map_c.o usage.o utils.o log.o modules.o $(CFLAGS) -Wl,--format=binary -Wl,fault_inject.so -Wl,--format=binary -Wl,fault_inject32.so -Wl,--format=default -o faint
 	mv $(OBJDIR)/faint $(OUTPUTDIR)/faint
 
 $(OBJDIR)/faint.o: $(SRCDIR)/faint.c
@@ -29,9 +29,9 @@ $(OBJDIR)/faint.o: $(SRCDIR)/faint.c
 $(OBJDIR)/usage.o: $(SRCDIR)/usage.c
 	$(CC) $(CFLAGS) -O2 -c $(SRCDIR)/usage.c -o $(OBJDIR)/usage.o
 
-$(OBJDIR)/fault_inject: $(SRCDIR)/fault_inject.cpp $(OBJDIR)/map.o $(OBJDIR)/map32.o
+$(OBJDIR)/fault_inject: $(SRCDIR)/fault_inject.cpp $(OBJDIR)/map.o $(OBJDIR)/map32.o $(OBJDIR)/modules_s.o
 	$(CXX) $(CXXFLAGS) -O0 -fPIC -DPIC -c -fno-stack-protector -funwind-tables -fpermissive $(SRCDIR)/fault_inject.cpp -o $(OBJDIR)/fault_inject.o
-	$(CXX) $(CXXFLAGS) -O0 -shared -o $(OBJDIR)/fault_inject.so $(OBJDIR)/map.o $(OBJDIR)/fault_inject.o -ldl
+	$(CXX) $(CXXFLAGS) -O0 -shared -o $(OBJDIR)/fault_inject.so $(OBJDIR)/map.o $(OBJDIR)/modules_s.o $(OBJDIR)/fault_inject.o -ldl
 
 	$(CXX) $(CXXFLAGS) -O0 -fPIC -DPIC -c -fno-stack-protector -funwind-tables -fpermissive -m32 $(SRCDIR)/fault_inject.cpp -o $(OBJDIR)/fault_inject32.o
 	$(CXX) $(CXXFLAGS) -O0 -shared -m32 -o $(OBJDIR)/fault_inject32.so $(OBJDIR)/map32.o $(OBJDIR)/fault_inject32.o -ldl
@@ -39,11 +39,24 @@ $(OBJDIR)/fault_inject: $(SRCDIR)/fault_inject.cpp $(OBJDIR)/map.o $(OBJDIR)/map
 $(OBJDIR)/map.o: $(SRCDIR)/map.c
 	$(CXX) $(CXXFLAGS) -O2 $(SRCDIR)/map.c -fPIC -DPIC -c -o $(OBJDIR)/map.o
 
+$(OBJDIR)/utils.o: $(SRCDIR)/utils.c
+	$(CC) $(CFLAGS) -O2 $(SRCDIR)/utils.c -c -o $(OBJDIR)/utils.o
+
+$(OBJDIR)/log.o: $(SRCDIR)/log.c
+	$(CC) $(CFLAGS) -O2 $(SRCDIR)/log.c -fno-builtin-log -c -o $(OBJDIR)/log.o
+
+$(OBJDIR)/modules.o: $(SRCDIR)/modules.c
+	$(CC) $(CFLAGS) -O2 $(SRCDIR)/modules.c -c -o $(OBJDIR)/modules.o
+
+$(OBJDIR)/modules_s.o: $(SRCDIR)/modules.c
+	$(CXX) $(CXXLAGS) -O2 $(SRCDIR)/modules.c -fPIC -DPIC -c -o $(OBJDIR)/modules_s.o
+
 $(OBJDIR)/map32.o: $(SRCDIR)/map.c
 	$(CXX) $(CXXFLAGS) -O2 $(SRCDIR)/map.c -fPIC -DPIC -c -m32 -o $(OBJDIR)/map32.o
 		
 $(OUTPUTDIR)/test: $(SRCDIR)/test.c
 	$(CC) $(CFLAGS) $(SRCDIR)/test.c -o $(OUTPUTDIR)/test
+	
 	
 $(OUTPUTDIR)/test32: $(SRCDIR)/test.c
 	$(CC) $(CFLAGS) $(SRCDIR)/test.c -m32 -o $(OUTPUTDIR)/test32
