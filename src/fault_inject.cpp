@@ -41,10 +41,10 @@ static h_fwrite real_fwrite = NULL;
 static unsigned int no_intercept = 0;
 
 static FaultSettings settings;
-static map_declare(faults)
-;
-static map_declare(types)
-;
+static map_declare(faults);
+
+static map_declare(types);
+
 
 static void* current_fault = NULL;
 

@@ -37,7 +37,7 @@ enum map_type {
 };
 
 #define map_create(m, type) cmap* m; _map_init(&m); if(type == MAP_STRING) {m->hash = map_hash_str; m->compare = map_compare_str;}
-#define map_declare(m) cmap* m;
+#define map_declare(m) cmap* m
 #define map_initialize(m, type) _map_init(&m); if(type == MAP_STRING) {m->hash = map_hash_str; m->compare = map_compare_str;}
 
 // ---------------------------------------------------------------------------
