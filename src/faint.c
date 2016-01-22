@@ -38,6 +38,7 @@
 #include "faint.h"
 
 static FaultSettings settings;
+static int valgrind = 0;
 
 #ifndef VERSION
 #define VERSION "0.1-debug"
@@ -61,7 +62,7 @@ int main(int argc, char* argv[]) {
 
   // preload fault inject library
   char* const envs[] = { (char*) "LD_PRELOAD=./fault_inject.so", NULL };
-  char* args[argc];
+  char* args[argc + 1];
 
   // inherit all arguments
   int i, arch = ARCH_64;
@@ -81,9 +82,10 @@ int main(int argc, char* argv[]) {
 
       log("Binary: %s (%d bit)", get_filename(), arch == ARCH_32 ? 32 : 64);
     }
-    args[i] = argv[i + binary_pos];
+    args[i + valgrind] = argv[i + binary_pos];
   }
-  args[i] = NULL;
+  args[i + valgrind] = NULL;
+  if(valgrind) args[0] = "/usr/bin/valgrind";
   log("");
 
   // check if compiled with debug symbols
@@ -162,7 +164,7 @@ int main(int argc, char* argv[]) {
         clear_crash_report();
         set_mode(INJECT);
         set_limit(i);
-        execve(get_filename(), args, envs);
+        execve(args[0], args, envs);
         log("Could not execute %s", get_filename());
         exit(0);
       }
@@ -173,7 +175,8 @@ int main(int argc, char* argv[]) {
   } else {
     // -> profile
     set_mode(PROFILE);
-    execve(get_filename(), args, envs);
+
+    execve(args[0], args, envs);
     log("{red}Could not execute %s{/red}", get_filename());
     exit(0);
   }
@@ -361,6 +364,8 @@ int parse_commandline(int argc, char* argv[]) {
         enable_colorlog(1);
       } else if(!strcmp(cmd, "no-logfile")) {
         enable_logfile(0);
+      } else if(!strcmp(cmd, "valgrind")) {
+        valgrind = 1;
       } else if(!strcmp(cmd, "version")) {
         printf("faint %s\n", VERSION);
         exit(0);

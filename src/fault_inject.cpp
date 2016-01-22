@@ -45,7 +45,6 @@ static map_declare(faults);
 
 static map_declare(types);
 
-
 static void* current_fault = NULL;
 
 static int init_done = 0;
@@ -243,6 +242,32 @@ void save_trace(const char* type) {
 }
 
 //-----------------------------------------------------------------------------
+int is_valgrind() {
+  block();
+
+  int j, nptrs, val = 0;
+  void *buffer[100];
+  char **strings;
+
+  nptrs = backtrace(buffer, 100);
+  strings = backtrace_symbols(buffer, nptrs);
+  if(strings) {
+    for(j = 0; j < nptrs; j++) {
+      if(strncmp(strings[j], settings.filename, strlen(settings.filename)) == 0) {
+        break;
+      }
+      if(strncmp(strings[j], "/usr/bin/valgrind", strlen("/usr/bin/valgrind")) == 0) {
+        val = 1;
+        break;
+      }
+    }
+    free(strings);
+  }
+  unblock();
+  return val;
+}
+
+//-----------------------------------------------------------------------------
 template<typename T>
 int handle_inject(const char* name, T* function) {
   if(*function == NULL) {
@@ -250,7 +275,7 @@ int handle_inject(const char* name, T* function) {
     init<T>(name, function);
   }
 
-  if(!module_active(name) || no_intercept) {
+  if(!module_active(name) || no_intercept || is_valgrind()) {
     return 0;
   }
 
@@ -262,6 +287,8 @@ int handle_inject(const char* name, T* function) {
     save_trace(name);
     return 0;
   } else if(settings.mode == INJECT) {
+    if(!addr)
+      return 0;
     if(!map(faults)->has(addr)) {
       printf("strange, %p was not profiled\n", addr);
       return 0;

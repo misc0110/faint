@@ -103,6 +103,9 @@ deb: $(OUTPUTDIR)/faint $(OUTPUTDIR)/manpage
 run: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test
 	$(OUTPUTDIR)/faint $(OUTPUTDIR)/test
 	
+run-valgrind: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test
+	$(OUTPUTDIR)/faint --valgrind $(OUTPUTDIR)/test
+		
 runcpp: $(OUTPUTDIR)/faint $(OUTPUTDIR)/testcpp
 	$(OUTPUTDIR)/faint $(OUTPUTDIR)/testcpp
 	
