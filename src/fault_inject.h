@@ -36,6 +36,10 @@
 #endif
 #include <dlfcn.h>
 
+#define FAIL 0
+#define WRAP 1
+#define REAL 2
+
 // function signatures of fault injectable functions
 typedef void* (*h_malloc)(size_t);
 typedef void* (*h_realloc)(void*, size_t);
@@ -45,7 +49,8 @@ typedef ssize_t (*h_getline)(char**, size_t*, FILE*);
 typedef char* (*h_fgets)(char*, int, FILE*);
 typedef size_t (*h_fread)(void*, size_t, size_t, FILE*);
 typedef size_t (*h_fwrite)(const void*, size_t, size_t, FILE*);
-
+typedef void (*h_free)(void*);
+typedef void (*h_exit)(int);
 
 void segfault_handler(int sig);
 

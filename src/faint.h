@@ -49,5 +49,7 @@ void set_limit(int lim);
 void set_mode(enum Mode m);
 void write_settings();
 void usage(const char* binary);
+int parse_heap(size_t** addr, size_t** size, size_t* blocks, size_t* total_size);
+void show_heap();
 
 #endif /* SRC_FAINT_H_ */

@@ -103,6 +103,10 @@ deb: $(OUTPUTDIR)/faint $(OUTPUTDIR)/manpage
 run: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test
 	$(OUTPUTDIR)/faint $(OUTPUTDIR)/test
 	
+run-heap: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test
+	$(OUTPUTDIR)/faint --trace-heap --colorlog $(OUTPUTDIR)/test
+
+	
 run-valgrind: $(OUTPUTDIR)/faint $(OUTPUTDIR)/test
 	$(OUTPUTDIR)/faint --valgrind $(OUTPUTDIR)/test
 		

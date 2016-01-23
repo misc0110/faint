@@ -70,6 +70,7 @@ Usage* generate_usage() {
   add_entry(u, "--valgrind", "Run profiled program under valgrind", 1);
   add_entry(u, "--profile-only", "Only to the profile step, no fault injection", 1);
   add_entry(u, "--inject-only", "Only to the injectino step, no profiling", 1);
+  add_entry(u, "--trace-heap", "Trace heap allocations and memory leaks", 1);
   add_entry(u, "--version", "Show program version", 1);
   return u;
 }

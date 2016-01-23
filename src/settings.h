@@ -36,6 +36,7 @@ typedef struct {
     char filename[256];
     uint32_t modules;
     enum Mode mode;
+    uint8_t trace_heap;
 }__attribute__((packed)) FaultSettings;
 
 // ---------------------------------------------------------------------------
@@ -50,5 +51,11 @@ typedef struct {
     uint64_t fault;
     uint64_t crash;
 }__attribute__((packed)) CrashEntry;
+
+// ---------------------------------------------------------------------------
+typedef struct {
+    uint64_t address;
+    uint64_t size;
+}__attribute__((packed)) HeapEntry;
 
 #endif

@@ -109,6 +109,7 @@ int main(int argc, char* argv[]) {
     }
     fclose(f);
   } else {
+    // inject only needs already a profile
     FILE* f = fopen("profile", "rb");
     if(!f) {
       log("{red}Need file 'profile'! Start with --profile-only first.{/red}");
@@ -125,6 +126,7 @@ int main(int argc, char* argv[]) {
   size_t calls = 0;
 
   pid_t pid;
+  // fork only if profiling is needed
   if(!inject_only) {
     pid = fork();
   } else {
@@ -145,6 +147,8 @@ int main(int argc, char* argv[]) {
     }
 
     injections = parse_profiling(&fault_addr, &fault_count, &fault_type, &calls, types);
+    if(settings.trace_heap)
+      show_heap();
 
     log("Found %d different injection positions with %d call(s)", injections, calls);
 
@@ -172,6 +176,9 @@ int main(int argc, char* argv[]) {
             if(killed)
               crash_count++;
           }
+
+          if(settings.trace_heap)
+            show_heap();
           log("{green}Injection #%d done{/green}", (i + 1));
         } else {
           log("\n\n{green}Inject fault #%d{/green}", (i + 1));
@@ -331,6 +338,7 @@ void cleanup() {
   remove("settings");
   if(!profile_only)
     remove("profile");
+  remove("heap");
   remove("crash");
   remove("fault_inject.so");
   log("\n\nfinished successfully!");
@@ -397,6 +405,8 @@ int parse_commandline(int argc, char* argv[]) {
           exit(1);
         }
         inject_only = 1;
+      } else if(!strcmp(cmd, "trace-heap")) {
+        settings.trace_heap = 1;
       } else if(!strcmp(cmd, "version")) {
         printf("faint %s\n", VERSION);
         exit(0);
@@ -517,4 +527,61 @@ int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls,
   }
   fclose(f);
   return injections;
+}
+
+// ---------------------------------------------------------------------------
+int parse_heap(size_t** addr, size_t** size, size_t* blocks, size_t* total_size) {
+  FILE* f = fopen("heap", "rb");
+  if(!f) {
+    log("{red}No heap profile generated!{/red}\n");
+    return 0;
+  }
+  fseek(f, 0, SEEK_END);
+  size_t fsize = ftell(f);
+  size_t heap_blocks = fsize / sizeof(HeapEntry);
+  fseek(f, 0, SEEK_SET);
+
+  *addr = malloc(sizeof(size_t) * heap_blocks);
+  *size = malloc(sizeof(size_t) * heap_blocks);
+
+  int i;
+  *total_size = 0;
+  for(i = 0; i < heap_blocks; i++) {
+    HeapEntry e;
+    if(!fread(&e, sizeof(HeapEntry), 1, f)) {
+      break;
+    }
+
+    (*addr)[i] = (size_t) e.address;
+    (*size)[i] = (size_t) e.size;
+    *total_size += e.size;
+  }
+
+  fclose(f);
+  *blocks = heap_blocks;
+  return 1;
+}
+
+// ---------------------------------------------------------------------------
+void show_heap() {
+  size_t *addr, *size, blocks, total_size;
+  if(!parse_heap(&addr, &size, &blocks, &total_size)) {
+    return;
+  }
+  log("\n");
+  if(blocks == 0) {
+    log("{green}All heap blocks are freed, no memory leak found{/green}");
+    return;
+  }
+  int i;
+  for(i = 0; i < blocks; i++) {
+    char file[256], fnc[256];
+    int line;
+    if(get_file_and_line(get_filename(), addr[i], file, &line, fnc)) {
+      log("Lost %d bytes at {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}", size[i], fnc, file, line);
+    } else {
+      log("Lost %d bytes at %p", size[i], addr[i]);
+    }
+  }
+  log("\n{red}Heap summary: lost %d bytes in %d blocks{/red}\n", total_size, blocks);
 }

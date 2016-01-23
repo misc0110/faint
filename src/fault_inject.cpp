@@ -37,6 +37,8 @@ static h_getline real_getline = NULL;
 static h_fgets real_fgets = NULL;
 static h_fread real_fread = NULL;
 static h_fwrite real_fwrite = NULL;
+static h_exit real_exit = NULL;
+static h_free real_free = NULL;
 
 static unsigned int no_intercept = 0;
 
@@ -44,6 +46,9 @@ static FaultSettings settings;
 static map_declare(faults);
 
 static map_declare(types);
+
+static map_declare(heap);
+static map_declare(heap_location);
 
 static void* current_fault = NULL;
 
@@ -79,12 +84,27 @@ class NoIntercept {
 static void _init(void) {
   block();
 
+  // read non-intercepted function handles
+  real_exit = (h_exit) dlsym(RTLD_NEXT, "exit");
+  real_free = (h_free) dlsym(RTLD_NEXT, "free");
+  if(!real_exit) {
+    printf("Error getting 'exit'\n");
+  }
+  if(!real_free) {
+    printf("Error getting 'free'\n");
+  }
+
   // read settings from file
   FILE *f = fopen("settings", "rb");
   if(f) {
     fread(&settings, sizeof(FaultSettings), 1, f);
     fclose(f);
   }
+
+  if(!heap)
+    map_initialize(heap, MAP_GENERAL);
+  if(!heap_location)
+    map_initialize(heap_location, MAP_GENERAL);
 
   if(settings.mode == INJECT) {
     if(!faults)
@@ -277,7 +297,7 @@ int handle_inject(const char* name, T* function) {
   }
 
   if(!module_active(name) || no_intercept || is_valgrind()) {
-    return 0;
+    return REAL;
   }
 
   void* addr = get_return_address(0);
@@ -286,71 +306,127 @@ int handle_inject(const char* name, T* function) {
   if(settings.mode == PROFILE) {
     NoIntercept n;
     save_trace(name);
-    return 0;
+    return WRAP;
   } else if(settings.mode == INJECT) {
     if(!addr)
-      return 0;
+      return REAL;
     if(!map(faults)->has(addr)) {
       printf("strange, %p was not profiled\n", addr);
-      return 0;
+      return REAL;
     } else {
       if(map(faults)->get(addr)) {
         // let it fail
-        return 1;
+        return FAIL;
       } else {
         // real function
-        return 0;
+        return WRAP;
       }
     }
   }
   // don't know what to do
-  return 0;
+  return REAL;
 }
 
 //-----------------------------------------------------------------------------
 void *malloc(size_t size) {
-  if(handle_inject<h_malloc>("malloc", &real_malloc)) {
+  int res;
+  if((res = handle_inject<h_malloc>("malloc", &real_malloc)) == FAIL) {
     return NULL;
   } else {
     NoIntercept n;
-    return real_malloc(size);
+    void* addr = real_malloc(size);
+    if(res == WRAP) {
+      map(heap)->set(addr, (void*) size);
+      map(heap_location)->set(addr, get_return_address(0));
+    }
+    return addr;
   }
 }
 
 //-----------------------------------------------------------------------------
 void *realloc(void* mem, size_t size) {
-  if(handle_inject<h_realloc>("realloc", &real_realloc)) {
+  int res;
+  if((res = handle_inject<h_realloc>("realloc", &real_realloc)) == FAIL) {
     return NULL;
   } else {
     NoIntercept n;
-    return real_realloc(mem, size);
+    void* addr = real_realloc(mem, size);
+    if(res == WRAP) {
+      map(heap)->unset(mem);
+      map(heap_location)->unset(mem);
+      map(heap)->set(addr, (void*) size);
+      map(heap_location)->set(addr, get_return_address(0));
+    }
+    return addr;
   }
 }
 
 //-----------------------------------------------------------------------------
 void *calloc(size_t elem, size_t size) {
-  if(handle_inject<h_calloc>("calloc", &real_calloc)) {
+  int res;
+  if((res = handle_inject<h_calloc>("calloc", &real_calloc)) == FAIL) {
     return NULL;
   } else {
     NoIntercept n;
-    return real_calloc(elem, size);
+    void* addr = real_calloc(elem, size);
+    if(res == WRAP) {
+      map(heap)->set(addr, (void*) size);
+      map(heap_location)->set(addr, get_return_address(0));
+    }
+    return addr;
   }
 }
 
 //-----------------------------------------------------------------------------
 void* operator new(size_t size) {
-  if(handle_inject<h_malloc>("malloc", &real_malloc)) {
+  int res;
+  if((res = handle_inject<h_malloc>("malloc", &real_malloc)) == FAIL) {
     throw std::bad_alloc();
     return NULL;
   } else {
     NoIntercept n;
-    return real_malloc(size);
+    void* addr = real_malloc(size);
+    if(res == WRAP) {
+      map(heap)->set(addr, (void*) size);
+      map(heap_location)->set(addr, get_return_address(0));
+    }
+    return addr;
+  }
+}
+
+//-----------------------------------------------------------------------------
+void free(void* addr) {
+  if(!real_free)
+    _init();
+
+  if(no_intercept || is_valgrind())
+    return real_free(addr);
+  else {
+    NoIntercept n;
+    map(heap)->unset(addr);
+    map(heap_location)->unset(addr);
+    return real_free(addr);
+  }
+}
+
+//-----------------------------------------------------------------------------
+void operator delete(void* addr) {
+  if(!real_free)
+    _init();
+
+  if(no_intercept || is_valgrind())
+    return real_free(addr);
+  else {
+    NoIntercept n;
+    map(heap)->unset(addr);
+    map(heap_location)->unset(addr);
+    return real_free(addr);
   }
 }
 
 //-----------------------------------------------------------------------------
 FILE *fopen(const char* name, const char* mode) {
-  if(handle_inject<h_fopen>("fopen", &real_fopen)) {
+  if(!handle_inject<h_fopen>("fopen", &real_fopen)) {
     return NULL;
   } else {
     NoIntercept n;
@@ -360,7 +436,7 @@ FILE *fopen(const char* name, const char* mode) {
 
 //-----------------------------------------------------------------------------
 ssize_t getline(char** lineptr, size_t* len, FILE* stream) {
-  if(handle_inject<h_getline>("getline", &real_getline)) {
+  if(!handle_inject<h_getline>("getline", &real_getline)) {
     return -1;
   } else {
     NoIntercept n;
@@ -370,7 +446,7 @@ ssize_t getline(char** lineptr, size_t* len, FILE* stream) {
 
 //-----------------------------------------------------------------------------
 char* fgets(char* buffer, int size, FILE* f) {
-  if(handle_inject<h_fgets>("fgets", &real_fgets)) {
+  if(!handle_inject<h_fgets>("fgets", &real_fgets)) {
     return NULL;
   } else {
     NoIntercept n;
@@ -380,7 +456,7 @@ char* fgets(char* buffer, int size, FILE* f) {
 
 //-----------------------------------------------------------------------------
 size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-  if(handle_inject<h_fread>("fread", &real_fread)) {
+  if(!handle_inject<h_fread>("fread", &real_fread)) {
     return 0;
   } else {
     NoIntercept n;
@@ -390,12 +466,37 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
 //-----------------------------------------------------------------------------
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream) {
-  if(handle_inject<h_fwrite>("fwrite", &real_fwrite)) {
+  if(!handle_inject<h_fwrite>("fwrite", &real_fwrite)) {
     return 0;
   } else {
     NoIntercept n;
     return real_fwrite(ptr, size, nmemb, stream);
   }
+}
+
+//-----------------------------------------------------------------------------
+void exit(int status) {
+  if(!real_exit)
+    _init();
+
+  NoIntercept n;
+
+  if(settings.trace_heap) {
+    cmap_iterator* it = map(heap)->iterator();
+    FILE* f = fopen("heap", "wb");
+    while(!map_iterator(it)->end()) {
+      HeapEntry h;
+      void* addr = map_iterator(it)->key();
+      h.address = (uint64_t) map(heap_location)->get(addr);
+      h.size = (uint64_t) map_iterator(it)->value();
+      fwrite(&h, sizeof(HeapEntry), 1, f);
+      map_iterator(it)->next();
+    }
+    map_iterator(it)->destroy();
+    fclose(f);
+  }
+
+  real_exit(status);
 }
 
 //-----------------------------------------------------------------------------
@@ -410,6 +511,7 @@ void segfault_handler(int sig) {
 
   fwrite(&e, sizeof(CrashEntry), 1, f);
   fclose(f);
+
   unblock();
   exit(sig + 128);
 }

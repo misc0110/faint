@@ -133,6 +133,8 @@ int get_file_and_line(const char* binary, const void* addr, char *file, int *lin
   } else {
     strcpy(file, "unknown");
     *line = 0;
+    pclose(f);
+    return 0;
   }
 
   pclose(f);
