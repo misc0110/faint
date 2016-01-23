@@ -290,7 +290,7 @@ int is_valgrind() {
 
 //-----------------------------------------------------------------------------
 template<typename T>
-int handle_inject(const char* name, T* function) {
+int handle_inject(const char* name, T* function, const char* tracename) {
   if(*function == NULL) {
     NoIntercept n;
     init<T>(name, function);
@@ -305,7 +305,7 @@ int handle_inject(const char* name, T* function) {
 
   if(settings.mode == PROFILE) {
     NoIntercept n;
-    save_trace(name);
+    save_trace(tracename);
     return WRAP;
   } else if(settings.mode == INJECT) {
     if(!addr)
@@ -325,6 +325,12 @@ int handle_inject(const char* name, T* function) {
   }
   // don't know what to do
   return REAL;
+}
+
+//-----------------------------------------------------------------------------
+template<typename T>
+int handle_inject(const char* name, T* function) {
+  return handle_inject(name, function, name);
 }
 
 //-----------------------------------------------------------------------------
@@ -380,7 +386,7 @@ void *calloc(size_t elem, size_t size) {
 //-----------------------------------------------------------------------------
 void* operator new(size_t size) {
   int res;
-  if((res = handle_inject<h_malloc>("malloc", &real_malloc)) == FAIL) {
+  if((res = handle_inject<h_malloc>("malloc", &real_malloc, "new")) == FAIL) {
     throw std::bad_alloc();
     return NULL;
   } else {
