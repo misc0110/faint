@@ -132,6 +132,7 @@ void init(const char* name, T* function) {
   *function = (T) dlsym(RTLD_NEXT, name);
   if(!*function) {
     fprintf(stderr, "Error in `dlsym`: %s\n", dlerror());
+    fprintf(stderr, "Cannot find function '%s'\n", name);
     return;
   }
 
@@ -338,7 +339,7 @@ void *calloc(size_t elem, size_t size) {
 
 //-----------------------------------------------------------------------------
 void* operator new(size_t size) {
-  if(handle_inject<h_malloc>("new", &real_malloc)) {
+  if(handle_inject<h_malloc>("malloc", &real_malloc)) {
     throw std::bad_alloc();
     return NULL;
   } else {

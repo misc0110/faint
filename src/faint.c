@@ -39,11 +39,12 @@
 
 static FaultSettings settings;
 static int valgrind = 0;
+static int profile_only = 0;
+static int inject_only = 0;
 
 #ifndef VERSION
 #define VERSION "0.1-debug"
 #endif
-
 
 // ---------------------------------------------------------------------------
 int main(int argc, char* argv[]) {
@@ -85,7 +86,8 @@ int main(int argc, char* argv[]) {
     args[i + valgrind] = argv[i + binary_pos];
   }
   args[i + valgrind] = NULL;
-  if(valgrind) args[0] = "/usr/bin/valgrind";
+  if(valgrind)
+    args[0] = "/usr/bin/valgrind";
   log("");
 
   // check if compiled with debug symbols
@@ -98,34 +100,50 @@ int main(int argc, char* argv[]) {
   disable_aslr();
 
   // fork first to profile
-  log("{green}Profiling start{/green}");
-  FILE* f = fopen("profile", "wb");
-  if(!f) {
-    log("{red}Need write access to file 'profile'!{/red}");
-    exit(1);
+  if(!inject_only) {
+    log("{green}Profiling start{/green}");
+    FILE* f = fopen("profile", "wb");
+    if(!f) {
+      log("{red}Need write access to file 'profile'!{/red}");
+      exit(1);
+    }
+    fclose(f);
+  } else {
+    FILE* f = fopen("profile", "rb");
+    if(!f) {
+      log("{red}Need file 'profile'! Start with --profile-only first.{/red}");
+      exit(1);
+    }
+    fclose(f);
   }
-  fclose(f);
 
   map_create(crashes, MAP_GENERAL);
   map_create(types, MAP_GENERAL);
   int crash_count = 0;
   int injections = 0;
+  size_t *fault_addr, *fault_count, *fault_type;
+  size_t calls = 0;
 
-  pid_t pid = fork();
+  pid_t pid;
+  if(!inject_only) {
+    pid = fork();
+  } else {
+    pid = 1;
+  }
   if(pid) {
-    int status;
-    waitpid(pid, &status, 0);
-    if(!WIFEXITED(status)) {
-      log("{red}There was an error while profiling, aborting now{/red}");
-      show_return_details(status);
-      exit(1);
+    if(!inject_only) {
+      int status;
+      waitpid(pid, &status, 0);
+      if(!WIFEXITED(status)) {
+        log("{red}There was an error while profiling, aborting now{/red}");
+        show_return_details(status);
+        exit(1);
+      }
+
+      log("{green}Profiling done{/green}");
+      // profiling done, fork to inject
     }
 
-    log("{green}Profiling done{/green}");
-    // profiling done, fork to inject
-    size_t calls = 0;
-
-    size_t *fault_addr, *fault_count, *fault_type;
     injections = parse_profiling(&fault_addr, &fault_count, &fault_type, &calls, types);
 
     log("Found %d different injection positions with %d call(s)", injections, calls);
@@ -135,38 +153,40 @@ int main(int argc, char* argv[]) {
     }
     log("");
 
-    // let one specific function fail per loop iteration
-    log("Injecting %d faults, one for every injection position", injections);
+    if(!profile_only) {
+      // let one specific function fail per loop iteration
+      log("Injecting %d faults, one for every injection position", injections);
 
-    for(i = 0; i < injections; i++) {
-      pid = fork();
-      if(pid) {
-        int killed = wait_for_child(pid);
+      for(i = 0; i < injections; i++) {
+        pid = fork();
+        if(pid) {
+          int killed = wait_for_child(pid);
 
-        void *crash, *fault;
-        int has_addr = get_crash_address(&crash, &fault);
-        if(has_addr) {
-          crash_details(get_filename(), crash, fault, types);
-          map(crashes)->set(crash, fault);
-          crash_count++;
-        } else {
-          if(killed)
+          void *crash, *fault;
+          int has_addr = get_crash_address(&crash, &fault);
+          if(has_addr) {
+            crash_details(get_filename(), crash, fault, types);
+            map(crashes)->set(crash, fault);
             crash_count++;
-        }
-        log("{green}Injection #%d done{/green}", (i + 1));
-      } else {
-        log("\n\n{green}Inject fault #%d{/green}", (i + 1));
-        log("Fault position:");
-        print_fault_position(get_filename(), (void*) (fault_addr[i]), fault_type[i], -1);
-        log("");
+          } else {
+            if(killed)
+              crash_count++;
+          }
+          log("{green}Injection #%d done{/green}", (i + 1));
+        } else {
+          log("\n\n{green}Inject fault #%d{/green}", (i + 1));
+          log("Fault position:");
+          print_fault_position(get_filename(), (void*) (fault_addr[i]), fault_type[i], -1);
+          log("");
 
-        // -> inject
-        clear_crash_report();
-        set_mode(INJECT);
-        set_limit(i);
-        execve(args[0], args, envs);
-        log("Could not execute %s", get_filename());
-        exit(0);
+          // -> inject
+          clear_crash_report();
+          set_mode(INJECT);
+          set_limit(i);
+          execve(args[0], args, envs);
+          log("Could not execute %s", get_filename());
+          exit(0);
+        }
       }
     }
     free(fault_addr);
@@ -178,10 +198,10 @@ int main(int argc, char* argv[]) {
 
     execve(args[0], args, envs);
     log("{red}Could not execute %s{/red}", get_filename());
-    exit(0);
   }
 
-  summary(get_filename(), crash_count, injections, crashes, types);
+  if(!profile_only)
+    summary(get_filename(), crash_count, injections, crashes, types);
 
   map(crashes)->destroy();
   map(types)->destroy();
@@ -271,9 +291,8 @@ void enable_module(const char* m) {
 
 // ---------------------------------------------------------------------------
 void disable_module(const char* m) {
-  settings.modules &=~(1 << get_module_id(m));
+  settings.modules &= ~(1 << get_module_id(m));
 }
-
 
 // ---------------------------------------------------------------------------
 void list_modules() {
@@ -307,11 +326,11 @@ int get_crash_address(void** crash, void** fault_addr) {
   return 1;
 }
 
-
 // ---------------------------------------------------------------------------
 void cleanup() {
   remove("settings");
-  remove("profile");
+  if(!profile_only)
+    remove("profile");
   remove("crash");
   remove("fault_inject.so");
   log("\n\nfinished successfully!");
@@ -366,6 +385,18 @@ int parse_commandline(int argc, char* argv[]) {
         enable_logfile(0);
       } else if(!strcmp(cmd, "valgrind")) {
         valgrind = 1;
+      } else if(!strcmp(cmd, "profile-only")) {
+        if(inject_only) {
+          log("{red}--profile-only and --inject-only are mutually exclusive!{/red}");
+          exit(1);
+        }
+        profile_only = 1;
+      } else if(!strcmp(cmd, "inject-only")) {
+        if(profile_only) {
+          log("{red}--profile-only and --inject-only are mutually exclusive!{/red}");
+          exit(1);
+        }
+        inject_only = 1;
       } else if(!strcmp(cmd, "version")) {
         printf("faint %s\n", VERSION);
         exit(0);
@@ -388,15 +419,14 @@ int parse_commandline(int argc, char* argv[]) {
   return binary_pos;
 }
 
-
 // ---------------------------------------------------------------------------
 void print_fault_position(const char* binary, const void* fault, int type, int count) {
   char m_file[256], m_function[256];
   int m_line;
   if(get_file_and_line(binary, fault, m_file, &m_line, m_function)) {
     if(count != -1) {
-      log(" >  [{yellow}%s{/yellow}] {cyan}%s{/cyan} in %s line {cyan}%d{/cyan}: %d calls", get_module(type), m_function,
-          m_file, m_line, count);
+      log(" >  [{yellow}%s{/yellow}] {cyan}%s{/cyan} in %s line {cyan}%d{/cyan}: %d calls", get_module(type),
+          m_function, m_file, m_line, count);
     } else {
       log(" >  [{yellow}%s{/yellow}] {cyan}%s{/cyan} in %s line {cyan}%d{/cyan}", get_module(type), m_function, m_file,
           m_line);
@@ -415,8 +445,8 @@ void crash_details(const char* binary, const void* crash, const void* fault, cma
   if(get_file_and_line(binary, crash, crash_file, &crash_line, crash_fnc)
       && get_file_and_line(binary, fault, fault_file, &fault_line, fault_fnc)) {
     log("  > {red}crash{/red}: {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}", crash_fnc, crash_file, crash_line);
-    log("  > {yellow}%s{/yellow}: {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}", get_module((size_t) map(types)->get(fault)),
-        fault_fnc, fault_file, fault_line);
+    log("  > {yellow}%s{/yellow}: {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}",
+        get_module((size_t) map(types)->get(fault)), fault_fnc, fault_file, fault_line);
   } else {
     log("No crash details available (maybe you forgot to compile with -g?)");
   }
