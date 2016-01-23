@@ -497,6 +497,9 @@ void exit(int status) {
   }
 
   real_exit(status);
+  while(1) {
+    // to prevent gcc warning
+  }
 }
 
 //-----------------------------------------------------------------------------

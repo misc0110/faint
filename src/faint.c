@@ -577,7 +577,7 @@ void show_heap() {
   for(i = 0; i < blocks; i++) {
     char file[256], fnc[256];
     int line;
-    if(get_file_and_line(get_filename(), addr[i], file, &line, fnc)) {
+    if(get_file_and_line(get_filename(), (void*)(addr[i]), file, &line, fnc)) {
       log("Lost %d bytes at {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}", size[i], fnc, file, line);
     } else {
       log("Lost %d bytes at %p", size[i], addr[i]);
