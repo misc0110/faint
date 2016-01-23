@@ -24,6 +24,7 @@
 #define SRC_LOG_H_
 
 void enable_logfile(int en);
+void enable_log(int en);
 void enable_colorlog(int col);
 void set_log_name(const char* name);
 void log(const char *format, ...);

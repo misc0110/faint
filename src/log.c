@@ -37,14 +37,19 @@
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
-
 static int colorlog = 0;
 static int logfile = 1;
+static int console_log = 1;
 static const char* logfile_name = "log.txt";
 
 // ---------------------------------------------------------------------------
 void enable_logfile(int en) {
   logfile = en;
+}
+
+// ---------------------------------------------------------------------------
+void enable_log(int en) {
+  console_log = en;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,32 +68,34 @@ void log(const char *format, ...) {
   time_t timer;
   char buffer[26], time_buffer[28];
   struct tm* tm_info;
-
-  // replace newlines with tag
-  char* tag_format = str_replace(format, "\n", "\n" LOG_TAG);
-  str_replace_inplace(&tag_format, "{red}", colorlog ? ANSI_COLOR_RED : "");
-  str_replace_inplace(&tag_format, "{/red}", colorlog ? ANSI_COLOR_RESET : "");
-  str_replace_inplace(&tag_format, "{green}", colorlog ? ANSI_COLOR_GREEN : "");
-  str_replace_inplace(&tag_format, "{/green}", colorlog ? ANSI_COLOR_RESET : "");
-  str_replace_inplace(&tag_format, "{blue}", colorlog ? ANSI_COLOR_BLUE : "");
-  str_replace_inplace(&tag_format, "{/blue}", colorlog ? ANSI_COLOR_RESET : "");
-  str_replace_inplace(&tag_format, "{yellow}", colorlog ? ANSI_COLOR_YELLOW : "");
-  str_replace_inplace(&tag_format, "{/yellow}", colorlog ? ANSI_COLOR_RESET : "");
-  str_replace_inplace(&tag_format, "{magenta}", colorlog ? ANSI_COLOR_MAGENTA : "");
-  str_replace_inplace(&tag_format, "{/magenta}", colorlog ? ANSI_COLOR_RESET : "");
-  str_replace_inplace(&tag_format, "{cyan}", colorlog ? ANSI_COLOR_CYAN : "");
-  str_replace_inplace(&tag_format, "{/cyan}", colorlog ? ANSI_COLOR_RESET : "");
-
-  // print to stderr
   va_list args;
-  va_start(args, format);
-  fprintf(stderr, "%s", LOG_TAG);
-  vfprintf(stderr, tag_format, args);
-  fprintf(stderr, "\n");
-  va_end(args);
+
+  if(console_log) {
+    // replace newlines with tag
+    char* tag_format = str_replace(format, "\n", "\n" LOG_TAG);
+    str_replace_inplace(&tag_format, "{red}", colorlog ? ANSI_COLOR_RED : "");
+    str_replace_inplace(&tag_format, "{/red}", colorlog ? ANSI_COLOR_RESET : "");
+    str_replace_inplace(&tag_format, "{green}", colorlog ? ANSI_COLOR_GREEN : "");
+    str_replace_inplace(&tag_format, "{/green}", colorlog ? ANSI_COLOR_RESET : "");
+    str_replace_inplace(&tag_format, "{blue}", colorlog ? ANSI_COLOR_BLUE : "");
+    str_replace_inplace(&tag_format, "{/blue}", colorlog ? ANSI_COLOR_RESET : "");
+    str_replace_inplace(&tag_format, "{yellow}", colorlog ? ANSI_COLOR_YELLOW : "");
+    str_replace_inplace(&tag_format, "{/yellow}", colorlog ? ANSI_COLOR_RESET : "");
+    str_replace_inplace(&tag_format, "{magenta}", colorlog ? ANSI_COLOR_MAGENTA : "");
+    str_replace_inplace(&tag_format, "{/magenta}", colorlog ? ANSI_COLOR_RESET : "");
+    str_replace_inplace(&tag_format, "{cyan}", colorlog ? ANSI_COLOR_CYAN : "");
+    str_replace_inplace(&tag_format, "{/cyan}", colorlog ? ANSI_COLOR_RESET : "");
+
+    // print to stderr
+    va_start(args, format);
+    fprintf(stderr, "%s", LOG_TAG);
+    vfprintf(stderr, tag_format, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+    free(tag_format);
+  }
 
   if(!logfile) {
-    free(tag_format);
     return;
   }
   // print to logfile
@@ -121,8 +128,6 @@ void log(const char *format, ...) {
   va_end(args);
   count++;
 
-  free(tag_format);
   free(file_format);
 }
-
 
