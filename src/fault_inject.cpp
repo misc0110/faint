@@ -38,6 +38,7 @@ static h_fgets real_fgets = NULL;
 static h_fread real_fread = NULL;
 static h_fwrite real_fwrite = NULL;
 static h_exit real_exit = NULL;
+static h_exit real_exit_ = NULL;
 static h_free real_free = NULL;
 
 static unsigned int no_intercept = 0;
@@ -86,8 +87,9 @@ static void _init(void) {
 
   // read non-intercepted function handles
   real_exit = (h_exit) dlsym(RTLD_NEXT, "exit");
+  real_exit_ = (h_exit) dlsym(RTLD_NEXT, "_exit");
   real_free = (h_free) dlsym(RTLD_NEXT, "free");
-  if(!real_exit) {
+  if(!real_exit || !real_exit_) {
     printf("Error getting 'exit'\n");
   }
   if(!real_free) {
@@ -341,9 +343,10 @@ void *malloc(size_t size) {
   } else {
     NoIntercept n;
     void* addr = real_malloc(size);
-    if(res == WRAP) {
+    if(res == WRAP && settings.trace_heap) {
       map(heap)->set(addr, (void*) size);
       map(heap_location)->set(addr, get_return_address(0));
+      save_heap();
     }
     return addr;
   }
@@ -357,11 +360,12 @@ void *realloc(void* mem, size_t size) {
   } else {
     NoIntercept n;
     void* addr = real_realloc(mem, size);
-    if(res == WRAP) {
+    if(res == WRAP && settings.trace_heap) {
       map(heap)->unset(mem);
       map(heap_location)->unset(mem);
       map(heap)->set(addr, (void*) size);
       map(heap_location)->set(addr, get_return_address(0));
+      save_heap();
     }
     return addr;
   }
@@ -375,9 +379,10 @@ void *calloc(size_t elem, size_t size) {
   } else {
     NoIntercept n;
     void* addr = real_calloc(elem, size);
-    if(res == WRAP) {
+    if(res == WRAP && settings.trace_heap) {
       map(heap)->set(addr, (void*) size);
       map(heap_location)->set(addr, get_return_address(0));
+      save_heap();
     }
     return addr;
   }
@@ -392,9 +397,10 @@ void* operator new(size_t size) {
   } else {
     NoIntercept n;
     void* addr = real_malloc(size);
-    if(res == WRAP) {
+    if(res == WRAP && settings.trace_heap) {
       map(heap)->set(addr, (void*) size);
       map(heap_location)->set(addr, get_return_address(0));
+      save_heap();
     }
     return addr;
   }
@@ -409,8 +415,11 @@ void free(void* addr) {
     return real_free(addr);
   else {
     NoIntercept n;
-    map(heap)->unset(addr);
-    map(heap_location)->unset(addr);
+    if(settings.trace_heap) {
+      map(heap)->unset(addr);
+      map(heap_location)->unset(addr);
+      save_heap();
+    }
     return real_free(addr);
   }
 }
@@ -424,8 +433,11 @@ void operator delete(void* addr) {
     return real_free(addr);
   else {
     NoIntercept n;
-    map(heap)->unset(addr);
-    map(heap_location)->unset(addr);
+    if(settings.trace_heap) {
+      map(heap)->unset(addr);
+      map(heap_location)->unset(addr);
+      save_heap();
+    }
     return real_free(addr);
   }
 }
@@ -485,27 +497,43 @@ void exit(int status) {
   if(!real_exit)
     _init();
 
-  NoIntercept n;
-
-  if(settings.trace_heap) {
-    cmap_iterator* it = map(heap)->iterator();
-    FILE* f = fopen("heap", "wb");
-    while(!map_iterator(it)->end()) {
-      HeapEntry h;
-      void* addr = map_iterator(it)->key();
-      h.address = (uint64_t) map(heap_location)->get(addr);
-      h.size = (uint64_t) map_iterator(it)->value();
-      fwrite(&h, sizeof(HeapEntry), 1, f);
-      map_iterator(it)->next();
-    }
-    map_iterator(it)->destroy();
-    fclose(f);
-  }
-
+  if(settings.trace_heap)
+    save_heap();
   real_exit(status);
   while(1) {
     // to prevent gcc warning
   }
+}
+
+//-----------------------------------------------------------------------------
+void _exit(int status) {
+  if(!real_exit_)
+    _init();
+
+  if(settings.trace_heap)
+    save_heap();
+  real_exit_(status);
+  while(1) {
+    // to prevent gcc warning
+  }
+}
+
+//-----------------------------------------------------------------------------
+void save_heap() {
+  NoIntercept n;
+
+  cmap_iterator* it = map(heap)->iterator();
+  FILE* f = fopen("heap", "wb");
+  while(!map_iterator(it)->end()) {
+    HeapEntry h;
+    void* addr = map_iterator(it)->key();
+    h.address = (uint64_t) map(heap_location)->get(addr);
+    h.size = (uint64_t) map_iterator(it)->value();
+    fwrite(&h, sizeof(HeapEntry), 1, f);
+    map_iterator(it)->next();
+  }
+  map_iterator(it)->destroy();
+  fclose(f);
 }
 
 //-----------------------------------------------------------------------------

@@ -53,6 +53,6 @@ typedef void (*h_free)(void*);
 typedef void (*h_exit)(int);
 
 void segfault_handler(int sig);
-
+void save_heap();
 
 #endif
