@@ -66,6 +66,8 @@ Usage* generate_usage() {
   add_entry(u, "--no-memory", "Disable all memory allocation modules", 1);
   add_entry(u, "--file-io", "Enable all file I/O modules", 1);
   add_entry(u, "--colorlog", "Enable log output with colors", 1);
+  add_entry(u, "--silent", "Do not output anything", 1);
+  add_entry_param(u, "--logfile", "Set name for logfile", 1, "filename", 0);
   add_entry(u, "--no-logfile", "Disable log file", 1);
   add_entry(u, "--valgrind", "Run profiled program under valgrind", 1);
   add_entry(u, "--profile-only", "Only to the profile step, no fault injection", 1);

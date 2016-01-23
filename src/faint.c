@@ -391,6 +391,8 @@ int parse_commandline(int argc, char* argv[]) {
         enable_colorlog(1);
       } else if(!strcmp(cmd, "no-logfile")) {
         enable_logfile(0);
+      } else if(!strcmp(cmd, "logfile") && i != argc - 1) {
+        set_log_name(argv[i + 1]);
       } else if(!strcmp(cmd, "valgrind")) {
         valgrind = 1;
       } else if(!strcmp(cmd, "profile-only")) {
