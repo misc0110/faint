@@ -393,6 +393,7 @@ int parse_commandline(int argc, char* argv[]) {
         enable_logfile(0);
       } else if(!strcmp(cmd, "logfile") && i != argc - 1) {
         set_log_name(argv[i + 1]);
+        i++;
       } else if(!strcmp(cmd, "silent")) {
         enable_log(0);
       }
