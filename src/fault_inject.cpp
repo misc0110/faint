@@ -343,7 +343,7 @@ void *malloc(size_t size) {
   } else {
     NoIntercept n;
     void* addr = real_malloc(size);
-    if(res == WRAP && settings.trace_heap) {
+    if(res == WRAP && settings.trace_heap && get_return_address(0)) {
       map(heap)->set(addr, (void*) size);
       map(heap_location)->set(addr, get_return_address(0));
       save_heap();
@@ -360,7 +360,7 @@ void *realloc(void* mem, size_t size) {
   } else {
     NoIntercept n;
     void* addr = real_realloc(mem, size);
-    if(res == WRAP && settings.trace_heap) {
+    if(res == WRAP && settings.trace_heap && get_return_address(0)) {
       map(heap)->unset(mem);
       map(heap_location)->unset(mem);
       map(heap)->set(addr, (void*) size);
@@ -379,7 +379,7 @@ void *calloc(size_t elem, size_t size) {
   } else {
     NoIntercept n;
     void* addr = real_calloc(elem, size);
-    if(res == WRAP && settings.trace_heap) {
+    if(res == WRAP && settings.trace_heap && get_return_address(0)) {
       map(heap)->set(addr, (void*) size);
       map(heap_location)->set(addr, get_return_address(0));
       save_heap();
@@ -397,7 +397,7 @@ void* operator new(size_t size) {
   } else {
     NoIntercept n;
     void* addr = real_malloc(size);
-    if(res == WRAP && settings.trace_heap) {
+    if(res == WRAP && settings.trace_heap && get_return_address(0)) {
       map(heap)->set(addr, (void*) size);
       map(heap_location)->set(addr, get_return_address(0));
       save_heap();
@@ -415,7 +415,7 @@ void free(void* addr) {
     return real_free(addr);
   else {
     NoIntercept n;
-    if(settings.trace_heap) {
+    if(settings.trace_heap && get_return_address(0)) {
       map(heap)->unset(addr);
       map(heap_location)->unset(addr);
       save_heap();
@@ -433,7 +433,7 @@ void operator delete(void* addr) {
     return real_free(addr);
   else {
     NoIntercept n;
-    if(settings.trace_heap) {
+    if(settings.trace_heap && get_return_address(0)) {
       map(heap)->unset(addr);
       map(heap_location)->unset(addr);
       save_heap();
