@@ -2,13 +2,13 @@ FAINT - FAult INjection Tester
 =========
 
 FAINT is a fully automated tool to dynamically check the out of memory handling in C and C++ programs. 
-It injects errors in `malloc`, `calloc`, `realloc`, `new` and `new[]` and reports crashes caused by these faults. 
+It injects errors amongst others in `malloc`, `calloc`, `realloc`, `new` and `new[]` and reports crashes caused by these faults. 
 
 # Usage
 
-`./faint <binary> [additional parameters]`
+`./faint [faint-options] [your-program] [your-program-options]`
  
-FAINT is used with the binary file and does not need the source code. Its usage is similar to `valgrind`.
+FAINT is used with the binary file and does not need the source code. Its usage is similar to `valgrind`. For usage details see `man faint` or `faint`.
 
 # Mode of operation
 
@@ -36,12 +36,19 @@ To build, simply `make && sudo make install`. The binary is called `faint`.
 
 There are two samples included, one written in C and one in C++. Execute `make run` or `make runcpp` respectively to examine those samples using faint. The output of `make run` should look similar to the following log:
 
-    [ FAINT ] Starting, Version 1.0
+    [ FAINT ] Activate module 'malloc'
+    [ FAINT ] Activate module 'realloc'
+    [ FAINT ] Activate module 'calloc'
+    [ FAINT ] Activate module 'new'
     [ FAINT ] 
-    [ FAINT ] Binary: ./faint
+    [ FAINT ] 
+    [ FAINT ] Starting, Version 0.3
+    [ FAINT ] 
+    [ FAINT ] Binary: ./bin/test (64 bit)
     [ FAINT ] 
     [ FAINT ] ASLR turned off successfully
     [ FAINT ] Profiling start
+    hallo
     Helper
     Helper
     Helper
@@ -52,34 +59,60 @@ There are two samples included, one written in C and one in C++. Execute `make r
     Helper
     Helper
     Helper
+    WUT?
     [ FAINT ] Profiling done
-    [ FAINT ] Found 4 different mallocs with 31 call(s)
-    [ FAINT ]  >  helper in test.c line 9: 10 calls
-    [ FAINT ]  >  do_mem in test.c line 24: 1 calls
-    [ FAINT ]  >  helper in test.c line 6: 10 calls
-    [ FAINT ]  >  do_mem in test.c line 20: 10 calls
+    [ FAINT ] Found 5 different injection positions with 32 call(s)
+    [ FAINT ]  >  [calloc] helper in test.c line 10: 10 calls
+    [ FAINT ]  >  [realloc] do_mem in test.c line 21: 10 calls
+    [ FAINT ]  >  [malloc] main in test.c line 32: 1 calls
+    [ FAINT ]  >  [malloc] do_mem in test.c line 25: 1 calls
+    [ FAINT ]  >  [malloc] helper in test.c line 7: 10 calls
     [ FAINT ] 
-    [ FAINT ] Injecting 4 faults, one for every malloc
-    [ FAINT ] 
+    [ FAINT ] Injecting 5 faults, one for every injection position
     [ FAINT ] 
     [ FAINT ] 
     [ FAINT ] Inject fault #1
     [ FAINT ] Fault position:
-    [ FAINT ]  >  helper in test.c line 9
+    [ FAINT ]  >  [calloc] helper in test.c line 10
     [ FAINT ] 
+    hallo
     Helper
     [ FAINT ] Exited, status: 139 (Segmentation fault)
-    [ FAINT ] Crashed at 0x4006af, caused by 0x4006a3
-    [ FAINT ] Crash details: 
-    [ FAINT ]  > Crash: helper (test.c) @ 10
-    [ FAINT ]  > Malloc: helper (test.c) @ 9
+    [ FAINT ] Crashed at 0x40091f, caused by 0x400913 [calloc]
+    [ FAINT ]   > crash: helper (test.c) line 11
+    [ FAINT ]   > calloc: helper (test.c) line 10
     [ FAINT ] Injection #1 done
     [ FAINT ] 
     [ FAINT ] 
     [ FAINT ] Inject fault #2
     [ FAINT ] Fault position:
-    [ FAINT ]  >  do_mem in test.c line 24
+    [ FAINT ]  >  [realloc] do_mem in test.c line 21
     [ FAINT ] 
+    hallo
+    Helper
+    [ FAINT ] Exited, status: 139 (Segmentation fault)
+    [ FAINT ] Crashed at 0x40098c, caused by 0x400984 [realloc]
+    [ FAINT ]   > crash: do_mem (test.c) line 22
+    [ FAINT ]   > realloc: do_mem (test.c) line 21
+    [ FAINT ] Injection #2 done
+    [ FAINT ] 
+    [ FAINT ] 
+    [ FAINT ] Inject fault #3
+    [ FAINT ] Fault position:
+    [ FAINT ]  >  [malloc] main in test.c line 32
+    [ FAINT ] 
+    [ FAINT ] Exited, status: 139 (Segmentation fault)
+    [ FAINT ] Crashed at 0x400a10, caused by 0x4009fa [malloc]
+    [ FAINT ]   > crash: main (test.c) line 35
+    [ FAINT ]   > malloc: main (test.c) line 32
+    [ FAINT ] Injection #3 done
+    [ FAINT ] 
+    [ FAINT ] 
+    [ FAINT ] Inject fault #4
+    [ FAINT ] Fault position:
+    [ FAINT ]  >  [malloc] do_mem in test.c line 25
+    [ FAINT ] 
+    hallo
     Helper
     Helper
     Helper
@@ -92,61 +125,51 @@ There are two samples included, one written in C and one in C++. Execute `make r
     Helper
     Malloc (do_mem) failed
     [ FAINT ] Exited, status: 139 (Segmentation fault)
-    [ FAINT ] Crashed at 0x400780, caused by 0x40074b
-    [ FAINT ] Crash details: 
-    [ FAINT ]  > Crash: main (test.c) @ 32
-    [ FAINT ]  > Malloc: do_mem (test.c) @ 24
-    [ FAINT ] Injection #2 done
+    [ FAINT ] Crashed at 0x400a28, caused by 0x4009bb [malloc]
+    [ FAINT ]   > crash: main (test.c) line 36
+    [ FAINT ]   > malloc: do_mem (test.c) line 25
+    [ FAINT ] Injection #4 done
     [ FAINT ] 
     [ FAINT ] 
-    [ FAINT ] Inject fault #3
+    [ FAINT ] Inject fault #5
     [ FAINT ] Fault position:
-    [ FAINT ]  >  helper in test.c line 6
+    [ FAINT ]  >  [malloc] helper in test.c line 7
     [ FAINT ] 
+    hallo
     Helper
     Malloc (helper) failed
     [ FAINT ] Exited, status: 139 (Segmentation fault)
-    [ FAINT ] Crashed at 0x4006ed, caused by 0x4006a3
-    [ FAINT ] Crash details: 
-    [ FAINT ]  > Crash: do_mem (test.c) @ 19
-    [ FAINT ]  > Malloc: helper (test.c) @ 9
-    [ FAINT ] Injection #3 done
-    [ FAINT ] 
-    [ FAINT ] 
-    [ FAINT ] Inject fault #4
-    [ FAINT ] Fault position:
-    [ FAINT ]  >  do_mem in test.c line 20
-    [ FAINT ] 
-    Helper
-    [ FAINT ] Exited, status: 139 (Segmentation fault)
-    [ FAINT ] Crashed at 0x40071c, caused by 0x400714
-    [ FAINT ] Crash details: 
-    [ FAINT ]  > Crash: do_mem (test.c) @ 21
-    [ FAINT ]  > Malloc: do_mem (test.c) @ 20
-    [ FAINT ] Injection #4 done
+    [ FAINT ] Crashed at 0x40095d, caused by 0x400913 [calloc]
+    [ FAINT ]   > crash: do_mem (test.c) line 20
+    [ FAINT ]   > calloc: helper (test.c) line 10
+    [ FAINT ] Injection #5 done
     [ FAINT ] 
     [ FAINT ] ======= SUMMARY =======
     [ FAINT ] 
-    [ FAINT ] Crashed at 4 from 4 injections
-    [ FAINT ] Unique crashes: 4
+    [ FAINT ] Crashed at 5 from 5 injections
+    [ FAINT ] Unique crashes: 5
     [ FAINT ] 
     [ FAINT ] Crash details:
     [ FAINT ] 
-    [ FAINT ] Crashed at 0x400780, caused by 0x40074b
-    [ FAINT ]    > Crash: main (test.c) line 32
-    [ FAINT ]    > Malloc: do_mem (test.c) line 24
+    [ FAINT ] Crashed at 0x400a10, caused by 0x4009fa [malloc]
+    [ FAINT ]   > crash: main (test.c) line 35
+    [ FAINT ]   > malloc: main (test.c) line 32
     [ FAINT ] 
-    [ FAINT ] Crashed at 0x40071c, caused by 0x400714
-    [ FAINT ]    > Crash: do_mem (test.c) line 21
-    [ FAINT ]    > Malloc: do_mem (test.c) line 20
+    [ FAINT ] Crashed at 0x400a28, caused by 0x4009bb [malloc]
+    [ FAINT ]   > crash: main (test.c) line 36
+    [ FAINT ]   > malloc: do_mem (test.c) line 25
     [ FAINT ] 
-    [ FAINT ] Crashed at 0x4006ed, caused by 0x4006a3
-    [ FAINT ]    > Crash: do_mem (test.c) line 19
-    [ FAINT ]    > Malloc: helper (test.c) line 9
+    [ FAINT ] Crashed at 0x40098c, caused by 0x400984 [realloc]
+    [ FAINT ]   > crash: do_mem (test.c) line 22
+    [ FAINT ]   > realloc: do_mem (test.c) line 21
     [ FAINT ] 
-    [ FAINT ] Crashed at 0x4006af, caused by 0x4006a3
-    [ FAINT ]    > Crash: helper (test.c) line 10
-    [ FAINT ]    > Malloc: helper (test.c) line 9
+    [ FAINT ] Crashed at 0x40095d, caused by 0x400913 [calloc]
+    [ FAINT ]   > crash: do_mem (test.c) line 20
+    [ FAINT ]   > calloc: helper (test.c) line 10
+    [ FAINT ] 
+    [ FAINT ] Crashed at 0x40091f, caused by 0x400913 [calloc]
+    [ FAINT ]   > crash: helper (test.c) line 11
+    [ FAINT ]   > calloc: helper (test.c) line 10
     [ FAINT ] 
     [ FAINT ] 
     [ FAINT ] finished successfully!
