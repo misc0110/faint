@@ -189,28 +189,34 @@ void print_backtrace() {
 }
 
 //-----------------------------------------------------------------------------
-void* get_return_address(int index) {
+void *get_return_address(int index) {
   block();
 
-  int j, nptrs;
+  int i, j, nptrs;
   void *buffer[100];
+  char buffer2[100];
+  char *offset_start, *offset_end;
   char **strings;
-  void* addr = NULL;
+  void *addr = NULL;
 
   nptrs = backtrace(buffer, 100);
   strings = backtrace_symbols(buffer, nptrs);
-  if(strings) {
-    for(j = 0; j < nptrs; j++) {
-      if(strncmp(strings[j], settings.filename, strlen(settings.filename)) == 0) {
-        if(index) {
-          //printf("skip\n");
+  if (strings) {
+    for (j = 0; j < nptrs; j++) {
+      if (strncmp(strings[j], settings.filename, strlen(settings.filename)) ==
+          0) {
+        if (index) {
+          // printf("skip\n");
           index--;
           continue;
         }
-        addr = buffer[j];
+        offset_start = strchr(strings[j], '+') + 3;
+        offset_end = strchr(strings[j], ')');
+        strncpy(buffer2, offset_start, offset_end - offset_start);
+        addr = (void *)strtol(buffer2, NULL, 16);
         break;
       } else {
-        //printf("skip: %s\n", strings[j]);
+        // printf("skip: %s\n", strings[j]);
       }
     }
     free(strings);
