@@ -160,6 +160,26 @@ void check_debug_symbols(const char* binary) {
 }
 
 // ---------------------------------------------------------------------------
+size_t get_base_address() {
+    size_t base = 0;
+    char cmd[256];
+    sprintf(cmd, "cat /proc/%d/maps | grep 'r-xp' | head -1 | sed 's/-/ /'", getpid());
+    FILE* addr = popen(cmd, "r");
+    if(addr) {
+        char line[256];
+        if(!fgets(line, 256, addr)) {
+            pclose(addr);
+            return 0;
+        }
+        if((base = strtoull(line, NULL, 16)) == 0) {
+            log("{red}Could not find base address!{/red}\n");
+        }
+        pclose(addr);
+    }
+    return base;
+}
+
+// ---------------------------------------------------------------------------
 int get_architecture(const char* binary) {
   int arch = ARCH_64;
   char obj_cmdline[256];

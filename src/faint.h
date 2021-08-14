@@ -32,8 +32,8 @@ extern uint8_t fault_lib32_end[] asm("_binary_fault_inject32_so_end");
 void usage(const char* binary);
 void extract_shared_library(int arch);
 int parse_profiling(size_t** addr, size_t** count, size_t** type, size_t* calls, cmap* types);
-void summary(const char* binary, int crash_count, int injections, cmap* crashes, cmap* types);
-void crash_details(const char* binary, const void* crash, const void* fault, cmap* types);
+void summary(const char* binary, int crash_count, int injections, cmap* crashes, cmap* types, size_t app_base);
+void crash_details(const char *binary, const void *crash, const void *fault, cmap *types, size_t base);
 void print_fault_position(const char* binary, const void* fault, int type, int count);
 int parse_commandline(int argc, char* argv[]);
 void enable_default_modules();
@@ -51,5 +51,7 @@ void write_settings();
 void usage(const char* binary);
 int parse_heap(size_t** addr, size_t** size, size_t* blocks, size_t* total_size);
 void show_heap();
+size_t get_base_address();
+
 
 #endif /* SRC_FAINT_H_ */

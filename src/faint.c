@@ -124,6 +124,7 @@ int main(int argc, char* argv[]) {
   int injections = 0;
   size_t *fault_addr, *fault_count, *fault_type;
   size_t calls = 0;
+  size_t app_base = 0;
 
   pid_t pid;
   // fork only if profiling is needed
@@ -161,6 +162,8 @@ int main(int argc, char* argv[]) {
       // let one specific function fail per loop iteration
       log("Injecting %d faults, one for every injection position", injections);
 
+      app_base = get_base_address();
+      log("Application base: 0x%zx", app_base);
       for(i = 0; i < injections; i++) {
         pid = fork();
         if(pid) {
@@ -169,7 +172,7 @@ int main(int argc, char* argv[]) {
           void *crash, *fault;
           int has_addr = get_crash_address(&crash, &fault);
           if(has_addr) {
-            crash_details(get_filename(), crash, fault, types);
+              crash_details(get_filename(), crash, fault, types, app_base);
             map(crashes)->set(crash, fault);
             crash_count++;
           } else {
@@ -208,7 +211,7 @@ int main(int argc, char* argv[]) {
   }
 
   if(!profile_only)
-    summary(get_filename(), crash_count, injections, crashes, types);
+    summary(get_filename(), crash_count, injections, crashes, types, app_base);
 
   map(crashes)->destroy();
   map(types)->destroy();
@@ -453,13 +456,21 @@ void print_fault_position(const char* binary, const void* fault, int type, int c
 }
 
 // ---------------------------------------------------------------------------
-void crash_details(const char* binary, const void* crash, const void* fault, cmap* types) {
+void crash_details(const char *binary, const void *crash, const void *fault, cmap *types, size_t base) {
   char crash_file[256], fault_file[256], crash_fnc[256], fault_fnc[256];
   int crash_line, fault_line;
 
+  //printf("%zx (- %zx)\n", (size_t)crash, base);
+  size_t crash_fixup = (size_t)crash;
+  size_t fault_fixup = (size_t)fault;
+  if(base && base <= (size_t)crash && base <= (size_t)fault) {
+      crash_fixup -= base;
+      fault_fixup -= base;
+  }
+
   log("{red}Crashed{/red} at %p, caused by %p [%s]", crash, fault, get_module((size_t) map(types)->get(fault)));
-  if(get_file_and_line(binary, crash, crash_file, &crash_line, crash_fnc)
-      && get_file_and_line(binary, fault, fault_file, &fault_line, fault_fnc)) {
+  if(get_file_and_line(binary, (void*)crash_fixup, crash_file, &crash_line, crash_fnc)
+      && get_file_and_line(binary, (void*)fault_fixup, fault_file, &fault_line, fault_fnc)) {
     log("  > {red}crash{/red}: {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}", crash_fnc, crash_file, crash_line);
     log("  > {yellow}%s{/yellow}: {cyan}%s{/cyan} (%s) line {cyan}%d{/cyan}",
         get_module((size_t) map(types)->get(fault)), fault_fnc, fault_file, fault_line);
@@ -469,7 +480,7 @@ void crash_details(const char* binary, const void* crash, const void* fault, cma
 }
 
 // ---------------------------------------------------------------------------
-void summary(const char* binary, int crash_count, int injections, cmap* crashes, cmap* types) {
+void summary(const char* binary, int crash_count, int injections, cmap* crashes, cmap* types, size_t app_base) {
   log("\n======= SUMMARY =======\n");
   log("Crashed at %d from %d injections", crash_count, injections);
 
@@ -491,7 +502,7 @@ void summary(const char* binary, int crash_count, int injections, cmap* crashes,
       void* crash = map_iterator(it)->key();
       void* fault = map_iterator(it)->value();
       log("");
-      crash_details(binary, crash, fault, types);
+        crash_details(binary, crash, fault, types, app_base);
       map_iterator(it)->next();
     }
     map_iterator(it)->destroy();

@@ -66,7 +66,7 @@ void set_log_name(const char* name) {
 void log(const char *format, ...) {
   static int count = 0;
   time_t timer;
-  char buffer[26], time_buffer[28];
+  char buffer[26], time_buffer[32];
   struct tm* tm_info;
   va_list args;
 
